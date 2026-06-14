@@ -1,0 +1,17 @@
+# Build output
+dist/
+.turbo/
+coverage/
+
+# Dependencies
+node_modules/
+
+# TS incremental build info
+tsconfig.tsbuildinfo
+
+# Local scratch / private notes (not part of the package)
+p/
+
+# Local overrides
+*.local
+*.local.*

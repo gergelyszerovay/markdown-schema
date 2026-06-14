@@ -1,0 +1,160 @@
+{
+  "frontmatter": {
+    "name": "Plugin Loader",
+    "stage": "ga"
+  },
+  "title": "v2.0.0",
+  "summary": "Rewrites the plugin loader to support async plugins and removes the legacy\n`v1` configuration format. Existing plugins keep working through a thin compat\nshim that is scheduled for removal in v3.",
+  "highlights": [
+    "Async plugin support via loadPlugin()",
+    "Removed the deprecated v1 config adapter",
+    "40% faster cold start on large plugin sets"
+  ],
+  "checklist": [
+    {
+      "checked": true,
+      "text": "Unit tests updated"
+    },
+    {
+      "checked": true,
+      "text": "Migration guide written"
+    },
+    {
+      "checked": true,
+      "text": "Changelog entry published"
+    }
+  ],
+  "acceptanceCriteria": [
+    {
+      "ID": "AC-001",
+      "Description": "Async plugin loads in under 100 ms",
+      "Priority": "High"
+    },
+    {
+      "ID": "AC-002",
+      "Description": "Legacy v1 config emits a deprecation warning",
+      "Priority": "Medium"
+    }
+  ],
+  "examples": [
+    {
+      "lang": "ts",
+      "value": "const plugin = await loadPlugin(\"logger\");"
+    },
+    {
+      "lang": "sh",
+      "value": "npx plugin-loader --list"
+    }
+  ],
+  "signature": {
+    "lang": "ts",
+    "value": "export async function loadPlugin(name: string): Promise<Plugin>"
+  },
+  "changes": [
+    {
+      "heading": "add: loadPlugin()",
+      "description": "New async entry point that resolves and initializes a plugin by name.\n\n| Param | Type   | Default | Description  |\n| ----- | ------ | ------- | ------------ |\n| name  | string | —       | Plugin name. |\n\n```ts\nconst p = await loadPlugin(\"logger\");\n```",
+      "params": [
+        {
+          "Param": "name",
+          "Type": "string",
+          "Default": "—",
+          "Description": "Plugin name."
+        }
+      ],
+      "snippets": [
+        {
+          "lang": "ts",
+          "value": "const p = await loadPlugin(\"logger\");"
+        }
+      ]
+    },
+    {
+      "heading": "fix: race in plugin cache",
+      "description": "Concurrent `loadPlugin()` calls for the same name no longer double-initialize.",
+      "snippets": []
+    },
+    {
+      "heading": "chore: drop v1 adapter",
+      "description": "Removes `config.v1` handling. No params, no snippets.",
+      "snippets": []
+    }
+  ],
+  "migration": [
+    {
+      "heading": "",
+      "body": "Replace every `createPlugin()` call with `await loadPlugin()`."
+    },
+    {
+      "heading": "",
+      "body": "Delete any `config.v1` keys from your configuration files."
+    }
+  ],
+  "appendix": [
+    {
+      "type": "paragraph",
+      "children": [
+        {
+          "type": "text",
+          "value": "See the full changelog at ",
+          "position": {
+            "start": {
+              "line": 84,
+              "column": 1,
+              "offset": 1673
+            },
+            "end": {
+              "line": 84,
+              "column": 27,
+              "offset": 1699
+            }
+          }
+        },
+        {
+          "type": "inlineCode",
+          "value": "CHANGELOG.md",
+          "position": {
+            "start": {
+              "line": 84,
+              "column": 27,
+              "offset": 1699
+            },
+            "end": {
+              "line": 84,
+              "column": 41,
+              "offset": 1713
+            }
+          }
+        },
+        {
+          "type": "text",
+          "value": " for prior releases.",
+          "position": {
+            "start": {
+              "line": 84,
+              "column": 41,
+              "offset": 1713
+            },
+            "end": {
+              "line": 84,
+              "column": 61,
+              "offset": 1733
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 84,
+          "column": 1,
+          "offset": 1673
+        },
+        "end": {
+          "line": 84,
+          "column": 61,
+          "offset": 1733
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "title": "Component Spec: Button",
+  "summary": "A single-purpose action trigger that renders a labelled button and fires an\nonClick event when the user activates it. Supports disabled and loading\nstates.",
+  "classification": {
+    "Type": "View",
+    "Scope": "Shared",
+    "Parent Component": "n/a",
+    "Repetition": "Conditional"
+  },
+  "responsibilities": [
+    {
+      "heading": "3.1 MUST",
+      "items": [
+        "Render a labelled, accessible button element.",
+        "Fire onClick when the user clicks or presses Enter/Space.",
+        "Apply the disabled visual when disabled is true and suppress onClick."
+      ]
+    },
+    {
+      "heading": "3.2 SHOULD",
+      "items": [
+        "Show a spinner in place of the label when loading is true.",
+        "Forward a ref to the underlying <button> element."
+      ]
+    },
+    {
+      "heading": "3.3 MUST NOT",
+      "items": [
+        "Manage navigation or side-effects; those belong in the caller.",
+        "Override browser focus styles without providing an accessible alternative."
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "Prop Name": "label",
+      "Type": "string",
+      "Default": "—",
+      "Description": "Visible button text or accessible label.",
+      "Required": "Yes"
+    },
+    {
+      "Prop Name": "disabled",
+      "Type": "boolean",
+      "Default": "false",
+      "Description": "Prevents interaction and applies disabled styling.",
+      "Required": "No"
+    },
+    {
+      "Prop Name": "loading",
+      "Type": "boolean",
+      "Default": "false",
+      "Description": "Replaces label with a spinner; implies disabled.",
+      "Required": "No"
+    },
+    {
+      "Prop Name": "variant",
+      "Type": "\"primary\" | \"secondary\" | \"ghost\"",
+      "Default": "\"primary\"",
+      "Description": "Visual style variant.",
+      "Required": "No"
+    }
+  ],
+  "outputs": [
+    {
+      "Event Name": "onClick",
+      "Payload Type": "() => void",
+      "Description": "Signals user intent to activate the button.",
+      "Emitted When": "User clicks or presses Enter/Space on a non-disabled button."
+    }
+  ],
+  "visualStates": [
+    {
+      "heading": "8.1 Default",
+      "items": [
+        "Description: Normal interactive state; no interaction in progress.",
+        "Visuals: Filled primary background, white label, full opacity."
+      ]
+    },
+    {
+      "heading": "8.2 Hover",
+      "items": [
+        "Description: Pointer is over the button.",
+        "Visuals: Background lightens by 10%; cursor changes to pointer."
+      ]
+    },
+    {
+      "heading": "8.3 Focused",
+      "items": [
+        "Description: Button receives keyboard focus.",
+        "Visuals: 2px offset focus ring matches the brand accent colour."
+      ]
+    },
+    {
+      "heading": "8.4 Disabled",
+      "items": [
+        "Description: disabled or loading is true.",
+        "Visuals: 40% opacity; cursor changes to not-allowed; onClick is suppressed."
+      ]
+    },
+    {
+      "heading": "8.5 Loading",
+      "items": [
+        "Description: loading is true; action is in progress.",
+        "Visuals: Label replaced by a spinner; button is disabled while in this state."
+      ]
+    }
+  ]
+}

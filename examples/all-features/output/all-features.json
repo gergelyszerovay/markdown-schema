@@ -1,0 +1,59 @@
+{
+  "title": "All-Features Showcase: Order Form 2026 Q2",
+  "inline:RequiredFields": {
+    "Name": "Acme Industries",
+    "SKU": "ACM-1234"
+  },
+  "inline:OptionalFields": {
+    "Nickname": "Acme",
+    "Tier": "Pro"
+  },
+  "inline:Enums": {
+    "Stage": "GA",
+    "Priority": "High"
+  },
+  "inline:EnumValuesWithEscapedPipes": {
+    "Logical Op": "A | B (either)"
+  },
+  "inline:ConditionalField": {
+    "Plan Type": "Paid",
+    "Card Last 4": "4242"
+  },
+  "inline:DefaultValue": {
+    "Currency": "EUR"
+  },
+  "inline:H3DirectiveInARepeatedSection": [
+    {
+      "heading": "add: loadPlugin()",
+      "items": [
+        "Adds an async entry point for plugin discovery.",
+        "Supports lazy module resolution from a registry."
+      ]
+    },
+    {
+      "heading": "fix: race in cache eviction",
+      "items": [
+        "Resolves a deadlock when two writers contend for the same key.",
+        "Adds a regression test covering concurrent eviction."
+      ]
+    }
+  ],
+  "block:TableWithRowDirective": [
+    {
+      "Prop Name": "label",
+      "Type": "string",
+      "Required": "Yes",
+      "Description": "Visible text rendered on the button."
+    },
+    {
+      "Prop Name": "disabled",
+      "Type": "string",
+      "Required": "No",
+      "Description": "When \"true\", suppresses onClick."
+    }
+  ],
+  "block:SectionDirective": {
+    "Notes": "Renew before 2026-12-31."
+  },
+  "block:Free-textSection": "A free-form description paragraph.\n\n```ts\nconst example = \"code block preserved\";\n```\n\n* bullet one\n* bullet two\n\n> A blockquote.\n\n***\n\n### Sub-heading inside free-text\n\nMore content under an H3."
+}

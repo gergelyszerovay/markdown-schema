@@ -1,0 +1,115 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ComponentDoc — example.md snapshot > parses examples/component/example.md and matches snapshot 1`] = `
+{
+  "classification": {
+    "Parent Component": "n/a",
+    "Repetition": "Conditional",
+    "Scope": "Shared",
+    "Type": "View",
+  },
+  "inputs": [
+    {
+      "Default": "—",
+      "Description": "Visible button text or accessible label.",
+      "Prop Name": "label",
+      "Required": "Yes",
+      "Type": "string",
+    },
+    {
+      "Default": "false",
+      "Description": "Prevents interaction and applies disabled styling.",
+      "Prop Name": "disabled",
+      "Required": "No",
+      "Type": "boolean",
+    },
+    {
+      "Default": "false",
+      "Description": "Replaces label with a spinner; implies disabled.",
+      "Prop Name": "loading",
+      "Required": "No",
+      "Type": "boolean",
+    },
+    {
+      "Default": ""primary"",
+      "Description": "Visual style variant.",
+      "Prop Name": "variant",
+      "Required": "No",
+      "Type": ""primary" | "secondary" | "ghost"",
+    },
+  ],
+  "outputs": [
+    {
+      "Description": "Signals user intent to activate the button.",
+      "Emitted When": "User clicks or presses Enter/Space on a non-disabled button.",
+      "Event Name": "onClick",
+      "Payload Type": "() => void",
+    },
+  ],
+  "responsibilities": [
+    {
+      "heading": "3.1 MUST",
+      "items": [
+        "Render a labelled, accessible button element.",
+        "Fire onClick when the user clicks or presses Enter/Space.",
+        "Apply the disabled visual when disabled is true and suppress onClick.",
+      ],
+    },
+    {
+      "heading": "3.2 SHOULD",
+      "items": [
+        "Show a spinner in place of the label when loading is true.",
+        "Forward a ref to the underlying <button> element.",
+      ],
+    },
+    {
+      "heading": "3.3 MUST NOT",
+      "items": [
+        "Manage navigation or side-effects; those belong in the caller.",
+        "Override browser focus styles without providing an accessible alternative.",
+      ],
+    },
+  ],
+  "summary": "A single-purpose action trigger that renders a labelled button and fires an
+\`onClick\` event when the user activates it. Supports disabled and loading
+states.",
+  "title": "Component Spec: Button",
+  "visualStates": [
+    {
+      "heading": "8.1 Default",
+      "items": [
+        "Description: Normal interactive state; no interaction in progress.",
+        "Visuals: Filled primary background, white label, full opacity.",
+      ],
+    },
+    {
+      "heading": "8.2 Hover",
+      "items": [
+        "Description: Pointer is over the button.",
+        "Visuals: Background lightens by 10%; cursor changes to pointer.",
+      ],
+    },
+    {
+      "heading": "8.3 Focused",
+      "items": [
+        "Description: Button receives keyboard focus.",
+        "Visuals: 2px offset focus ring matches the brand accent colour.",
+      ],
+    },
+    {
+      "heading": "8.4 Disabled",
+      "items": [
+        "Description: disabled or loading is true.",
+        "Visuals: 40% opacity; cursor changes to not-allowed; onClick is suppressed.",
+      ],
+    },
+    {
+      "heading": "8.5 Loading",
+      "items": [
+        "Description: loading is true; action is in progress.",
+        "Visuals: Label replaced by a spinner; button is disabled while in this state.",
+      ],
+    },
+  ],
+}
+`;
