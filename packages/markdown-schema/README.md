@@ -189,7 +189,7 @@ project:
   ```
 
 The skill source lives under
-[`.claude/skills/markdown-schema/`](.claude/skills/markdown-schema/):
+[`skills/markdown-schema/`](skills/markdown-schema/):
 
 | File                              | Role                                                                    |
 | --------------------------------- | ----------------------------------------------------------------------- |

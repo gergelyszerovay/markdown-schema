@@ -2,7 +2,7 @@
 name: markdown-schema
 description: Derive, author, fill, or validate `*.template.md` files. Use when the user wants to derive a template from a few example documents, design or change a template, complete (fill) a template with real content, validate a filled document against its template using the `validate-md` CLI, or debug a `validate-md` error message. Covers these four workflows, and where templates live and how documents bind to them, for the `markdown-schema` package.
 metadata:
-  version: '0.1.3'
+  version: '0.1.4'
 ---
 
 # Skill: markdown-schema

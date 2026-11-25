@@ -4,6 +4,12 @@ Release notes for those who consume a version.
 
 ## Unreleased
 
+## 0.1.4
+
+### Changed
+
+- **The skill's folder in the package is `skills/markdown-schema/`.** Its content is unchanged.
+
 ## 0.1.3
 
 ### Changed

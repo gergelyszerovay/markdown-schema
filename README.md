@@ -189,7 +189,7 @@ project:
   ```
 
 The skill source lives under
-[`.claude/skills/markdown-schema/`](packages/markdown-schema/.claude/skills/markdown-schema/):
+[`skills/markdown-schema/`](packages/markdown-schema/skills/markdown-schema/):
 
 | File                              | Role                                                                    |
 | --------------------------------- | ----------------------------------------------------------------------- |
@@ -978,10 +978,10 @@ schema-validated by the parser; frontmatter rules belong in `*.refine.ts`.
 
 ## Repository layout
 
-| Path                        | What it holds                                                                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `packages/markdown-schema/` | The package: source (`libs/`), the `validate-md` command (`bin/`, `app/`), the agent skill (`.claude/skills/`), examples, tests and the package README |
-| `CHANGELOG.md`              | Release notes, one section per version                                                                                                                 |
+| Path                        | What it holds                                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/markdown-schema/` | The package: source (`libs/`), the `validate-md` command (`bin/`, `app/`), the agent skill (`skills/`), examples, tests and the package README |
+| `CHANGELOG.md`              | Release notes, one section per version                                                                                                         |
 
 To run the tests, install once and run them from the package folder (Node 24 and pnpm):
 
@@ -994,11 +994,11 @@ pnpm build       # tsdown → dist/
 
 ## About this repository
 
-This repository is a read-only copy of the `markdown-schema` part of a private repository, made at each release. It holds the source of the version 0.13.7.
+This repository is a read-only copy of the `markdown-schema` part of a private repository, made at each release. It holds the source of the version 0.13.8.
 
 | Package | Version | Folder |
 | ------- | ------- | ------ |
-| `markdown-schema` | 0.13.7 | `packages/markdown-schema` |
+| `markdown-schema` | 0.13.8 | `packages/markdown-schema` |
 
 The packages are published to npm from the maintainer's machine, from the tagged commit `v<version>` of this repository.
 

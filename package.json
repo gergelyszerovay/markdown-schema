@@ -1,7 +1,7 @@
 {
   "name": "markdown-schema",
   "private": true,
-  "description": "The public copy of the markdown-schema release group, version 0.13.7.",
+  "description": "The public copy of the markdown-schema release group, version 0.13.8.",
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "typecheck": "pnpm -r --if-present run typecheck",

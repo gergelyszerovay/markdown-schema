@@ -1,6 +1,6 @@
 {
   "name": "markdown-schema",
-  "version": "0.13.7",
+  "version": "0.13.8",
   "description": "Turn a Markdown template into a schema and validate Markdown documents against it.",
   "type": "module",
   "license": "MIT",
@@ -34,7 +34,7 @@
       "types": "./dist/node.d.mts",
       "default": "./dist/node.mjs"
     },
-    "./skills/*": "./.claude/skills/*"
+    "./skills/*": "./skills/*"
   },
   "bin": {
     "validate-md": "bin/validate-md.mjs"
@@ -42,7 +42,7 @@
   "files": [
     "bin",
     "dist",
-    ".claude/skills",
+    "skills",
     "README.md",
     "CHANGELOG.md"
   ],

@@ -4,6 +4,13 @@ Release notes of the markdown-schema group, one section per release, generated f
 
 ## Unreleased
 
+## 0.13.8
+
+### Changed
+
+- **markdown-schema: The skill ships from `skills/`.** The package's `markdown-schema` skill moved from `.claude/skills/` to `skills/`;
+  the `./skills/*` export is unchanged, so installing it with `package-skills` or `npx skills add` works as before.
+
 ## 0.13.7
 
 ### Changed
