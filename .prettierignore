@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+pnpm-lock.yaml
+temp/
+# The person's notes
+.notes/
+markdown-schema-templates/
+.claude/skills/
+.agents/skills/
+packages/*/examples/
+packages/*/libs/**/fixtures/
+**/__snapshots__/

@@ -1,65 +1,148 @@
 # markdown-schema
 
-Turn a human-readable markdown document into **typed, validated, structured
-data** — define the shape once, then parse every document that follows it into a
-JSON object you can query, transform, and render.
+Validate Markdown documents against a template, and parse them into typed data.
 
-## Goals
+## Example
 
-- **One source of truth.** Authors edit plain markdown in any editor; tools
-  consume the same file as structured data. The structure is _derived_, never
-  duplicated.
-- **Markdown you can compute over, not just display.** A parsed document is a
-  typed object (`frontmatter` + `title` + section keys), so a renderer reads
-  `doc.frontmatter.colors` or `doc.endpoints[]` directly — no inline regex, no
-  string-hunting.
-- **Correctness you can enforce in CI.** Every document is validated against a
-  Zod schema. A doc that drifts from its shape — a missing section, a malformed
-  table, a broken cross-reference — fails the `validate-md` CLI.
-- **Author-friendly, machine-readable.** The markdown stays readable and
-  diff-friendly; downstream gets the rigor of a typed payload.
+A release note, written in plain Markdown, `release.md`:
 
-### Why structured data beats raw markdown
+```markdown
+# Release: Widget 2.1
 
-Raw markdown can only be _displayed_. Once parsed into typed fields, the same
-file drives many renderings. Two examples, each from a single markdown file:
+## Metadata
 
-- **A design-token doc** — following Google Labs'
-  [DESIGN.md specification](https://stitch.withgoogle.com/docs/design-md/specification)
-  ([source](https://github.com/google-labs-code/design.md)), where YAML
-  frontmatter holds machine-readable tokens (the _what_) and the markdown body
-  holds human-readable design rationale (the _why_). The frontmatter parses into
-  typed maps (`colors`, `typography`, `spacing`, `rounded`, `components`), so a
-  renderer can show colors as **interactive swatches**, typography as **live
-  font specimens**, spacing as **dimension bars**, and resolve
-  `{foreground}`-style token references against the color map at render time. Raw
-  markdown would show `#3d6e6c` as text; structured data shows the colour.
-- **A system-overview doc** — GFM tables parse into typed row arrays
-  (`nodes[]`, `edges[]`, `groups[]`, `layoutHints[]`), which a renderer can turn
-  into a **diagram**: filter nodes by deployment mode without re-parsing, lay
-  them out from numeric position hints, compute group bounding boxes, and route
-  edges by geometry. Raw markdown is a table you read; structured data is a graph
-  you filter and lay out.
+- Version: 2.1.0
+- Stage: GA
 
-The trade is parse-once-up-front for query-and-render-many afterwards.
+## Highlights
+
+- Dark mode for every page.
+- Export to CSV.
+
+## Fixes
+
+| ID    | Description                     | Priority |
+| ----- | ------------------------------- | -------- |
+| FIX-1 | The date picker skips February. | High     |
+| FIX-2 | Long names overflow the header. | Low      |
+```
+
+`validate-md` checks it against its template and turns it into this JSON:
+
+```bash
+npx validate-md --template release.template.md --emit-json release.json release.md
+# release.md: OK
+```
+
+```json
+{
+  "title": "Release: Widget 2.1",
+  "metadata": {
+    "Version": "2.1.0",
+    "Stage": "GA"
+  },
+  "highlights": ["Dark mode for every page.", "Export to CSV."],
+  "fixes": [
+    {
+      "ID": "FIX-1",
+      "Description": "The date picker skips February.",
+      "Priority": "High"
+    },
+    {
+      "ID": "FIX-2",
+      "Description": "Long names overflow the header.",
+      "Priority": "Low"
+    }
+  ]
+}
+```
+
+The template, `release.template.md`, is the same document with a directive in place of each value. Everything
+outside the `<!-- TEMPLATE-ONLY: -->` directives is structure every release note must keep:
+
+```markdown
+# Release: <!-- TEMPLATE-ONLY: string; required -->
+
+## Metadata
+
+- Version: <!-- TEMPLATE-ONLY: string; regex `^\d+\.\d+\.\d+$`; required -->
+- Stage: <!-- TEMPLATE-ONLY: enum: Alpha | Beta | GA; required -->
+
+## Highlights
+
+- <!-- TEMPLATE-ONLY: string; required -->
+
+## Fixes
+
+| ID  | Description | Priority |
+| --- | ----------- | -------- |
+
+<!-- TEMPLATE-ONLY: row; min-rows: 1
+ID: string; regex `^FIX-\d+$`; required
+Description: string; required
+Priority: enum: Low | Medium | High; required
+-->
+
+| FIX-1 | Sample fix. | High |
+```
+
+A document that drifts from it fails with the reason, for example one without its fixes table:
+
+```text
+release.md: Missing required section: "Fixes"
+```
+
+## How it is used
+
+A template describes one kind of document: its sections, its fields and their order. Every document of that kind
+follows the template, `validate-md` reports any document that does not, and each valid document parses into typed
+data that code can query, transform and render.
+
+You rarely write a template by hand. The package ships an [agent skill](#agent-skill) that teaches a coding agent to
+author, fill and validate templates, so a typical workflow is:
+
+1. **Write a few documents** of the kind, or have an agent draft them, until their shape settles.
+2. **Ask the agent to derive the template** from them. The skill tells it which directive fits each value, where a
+   section is fixed or optional, and which rules belong in a `*.refine.ts` file.
+3. **Have the agent fill the template** for each new document.
+4. **Run `validate-md`** in your checks, so a document that drifts from its template fails, with the file, line
+   and reason.
+5. **Parse the documents in code** (`parseTemplate`) wherever you need their data.
+
+## What `validate-md` checks
+
+Templates are strict by default. A filled document fails when:
+
+- a required section is missing, or a section the template does not declare appears (unless the template is
+  `document; open`);
+- the sections are in another order (unless the template is `document; unordered`);
+- a list has a key the template does not declare, or lacks a required one;
+- a table has an empty required cell, a value of the wrong type, or fewer rows than `min-rows`;
+- two sections have the same heading;
+- an optional section is present but its content does not match (optional means it may be absent).
+
+A template fails too (`Error: invalid template <file>: …`) on an unknown directive or modifier, a malformed `regex`, a
+contradictory combination (`required` with `only-if` or `default=`), colliding section keys, or an unsafe regex, so a
+mistake in a template never weakens validation.
 
 ## Two ways to define a shape
 
-- **Template mode** (recommended for most docs) — write a `*.template.md` file
-  with `<!-- TEMPLATE-ONLY: -->` directives; the schema is derived automatically
-  at runtime. No separate TypeScript file, and it powers the `validate-md` CLI.
-- **Programmatic mode** (advanced) — define the schema in TypeScript with
-  `defineDocSchema` when you need full static types, custom extractors, or shapes
-  the directive grammar can't express (geometry, cross-section invariants).
+- **Template mode** (most documents): a `*.template.md` with `<!-- TEMPLATE-ONLY: -->` directives, as in the
+  example. `validate-md` and `parseTemplate` derive the schema from it.
+- **Programmatic mode** (advanced): a schema written in TypeScript with `defineDocSchema`, for full static types,
+  custom extractors or shapes the directives cannot express.
 
-Both modes parse a leading YAML **frontmatter** block when present and expose it
-as `doc.frontmatter` — see [Frontmatter](#frontmatter).
+Both read a leading YAML [frontmatter](#frontmatter) block into `doc.frontmatter`.
 
 ## Install
 
 ```bash
-pnpm add markdown-schema
+npm i -D markdown-schema
+# or
+pnpm add -D markdown-schema
 ```
+
+It needs Node.js 24 or later (see [Requirements](#requirements)).
 
 The core API (`parseTemplate`, `defineDocSchema`, extractors) runs in the
 **browser and Node**. Filesystem helpers (`loadRefine`) and the CLI are
@@ -69,45 +152,54 @@ Node-only — see [Entry points](#entry-points).
 
 ## Agent skill
 
-The package ships an **agent skill** that teaches a coding agent (Claude Code,
-Cursor, Codex, and 70+ others) the three template-mode workflows:
+The package ships an **agent skill**, `markdown-schema`, that teaches a coding agent the template workflows:
 
-- **Authoring** a `*.template.md` — choosing directives, splitting sections, and
-  deciding what belongs in a `*.refine.ts` companion.
+- **Deriving** a `*.template.md` from a few example documents: which sections are required or optional, which
+  directive fits each value, and checking the result against the documents.
+- **Authoring** or changing a template: choosing directives, splitting sections, and deciding what belongs in a
+  `*.refine.ts` companion.
 - **Filling** a template — replacing `<!-- TEMPLATE-ONLY: -->` directives with
   real content.
 - **Validating** a document with `validate-md`, including how to read and triage
   its error output.
 
 It encodes the directive grammar, a which-directive decision table, the
-template-vs-`*.refine.ts` boundary, and a triage table for common failures, so
+template-vs-`*.refine.ts` boundary, the traps the engine does not catch, and a triage table of
+`validate-md`'s messages, so
 the agent gets these workflows right without re-deriving the rules each time.
 
 ### Installing the skill
 
-Use the [`skills`](https://github.com/vercel-labs/skills) CLI — the open
-agent-skills installer. It copies the skill into your agent's skills directory
-(`.claude/skills/`, `.cursor/skills/`, …) and auto-detects which agents you have:
+The skill ships in the npm package (exported as `./skills/*`). Two ways to copy it into a
+project:
 
-```bash
-# install the skill from this repo into the current project
-npx skills add gergelyszerovay/markdown-schema --skill markdown-schema
+- With [`package-skills`](https://github.com/gergelyszerovay/package-skills): list the package
+  in `devSkills` of the root `package.json` and run `package-skills`.
 
-# …or globally (~/.claude/skills/, ~/.cursor/skills/, …)
-npx skills add gergelyszerovay/markdown-schema --skill markdown-schema -g
-```
+  ```json
+  { "devSkills": ["markdown-schema"] }
+  ```
+
+- With the [`skills`](https://github.com/vercel-labs/skills) CLI, which copies the skill into
+  your agent's skills directory and detects which agents you have:
+
+  ```bash
+  npx skills add gergelyszerovay/markdown-schema --skill markdown-schema      # this project
+  npx skills add gergelyszerovay/markdown-schema --skill markdown-schema -g   # global
+  ```
 
 The skill source lives under
-[`.claude/skills/markdown-schema/`](.claude/skills/markdown-schema/):
+[`.claude/skills/markdown-schema/`](packages/markdown-schema/.claude/skills/markdown-schema/):
 
-| File                             | Role                                                      |
-| -------------------------------- | -------------------------------------------------------- |
-| `SKILL.md`                       | Skill entry point — triggers and the three workflows     |
-| `markdown-schema.guideline.md` | Source of truth for the `<!-- TEMPLATE-ONLY: -->` grammar |
+| File                              | Role                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `SKILL.md`                        | Skill entry point — triggers, the workflows and the error table         |
+| `markdown-schema.guideline.md`    | Reference for the `<!-- TEMPLATE-ONLY: -->` grammar                     |
+| `template-structure.guideline.md` | Template folder anatomy, the catalog, and binding by name and proximity |
 
 > Agents do **not** scan `node_modules`, so installing the npm package alone does
-> not register the skill — use `npx skills add` (above) to copy it onto a skills
-> path. As a fallback you can copy the directory manually into `.claude/skills/`.
+> not register the skill: use one of the two ways above, or copy the directory into
+> `.claude/skills/` by hand.
 
 Once installed, the agent triggers it automatically when you ask to author,
 fill, or validate a `*.template.md`.
@@ -116,108 +208,34 @@ fill, or validate a `*.template.md`.
 
 ## Template mode
 
-### 1. Write a template
+### Directives
 
-`*.template.md` files use `<!-- TEMPLATE-ONLY: ... -->` HTML comments to embed
-schema directives and author-facing prose. Everything outside the comments is
-fixed structure that every filled instance must preserve.
+A template is a document of its kind with `<!-- TEMPLATE-ONLY: ... -->` comments in place of the values.
+Everything outside the comments is fixed structure that every filled document keeps. Directives come in two shapes:
 
-Directives come in two structural shapes:
+- **Inline directives** sit inside a heading, list item or paragraph, and close on the same line.
+- **Block directives** (a table's `row`, a `guide`) start on their own line at column 3 or less, close on their own
+  line, and have their body lines at column 0.
 
-- **Inline directives** sit _inside_ a heading, list item, or paragraph and
-  must close on the same line as the opener.
-- **Block directives** sit on their own line, opener at column ≤ 3, closer
-  on its own line. Body lines must start at column 0.
+A [`guide` block](#author-facing-prose-guide-blocks) holds instructions for the author, which the parser ignores.
+The [directive reference](#directive-reference) lists every directive and modifier.
 
-Author-facing prose lives in standalone `guide` block directives — `//`-prefixed
-lines, ignored by the parser. Place them immediately before the field, list,
-table, or section they document.
+### Parse in code
 
-```markdown
-<!-- TEMPLATE-ONLY: guide
-// Short product name + release date, e.g. "Acme 2.4 — 2026-05-08".
--->
-
-# Release Notes: <!-- TEMPLATE-ONLY: string; required -->
-
-## 1. Metadata
-
-- Version: <!-- TEMPLATE-ONLY: string; regex `^\d+\.\d+\.\d+$`; required -->
-
-<!-- TEMPLATE-ONLY: guide
-// Use GA only after the release has shipped to all customers.
--->
-
-- Stage: <!-- TEMPLATE-ONLY: enum: Alpha | Beta | GA; required -->
-
-## 2. Highlights
-
-<!-- TEMPLATE-ONLY: guide
-// One concise sentence per bullet. Keep under 80 chars.
--->
-
-- <!-- TEMPLATE-ONLY: string; required -->
-
-## 3. Acceptance Criteria
-
-| ID  | Description | Priority |
-| --- | ----------- | -------- |
-
-<!-- TEMPLATE-ONLY: row; min-rows: 1
-ID: string; regex `^AC-\d+$`; required
-Description: string; required
-Priority: enum: Low | Medium | High; required
--->
-
-| AC-001 | Sample criterion. | High |
-```
-
-### 2. Fill the template
-
-Replace every `<!-- TEMPLATE-ONLY: … -->` block with actual content:
-
-```markdown
-# Release Notes: Widget v2
-
-## 1. Metadata
-
-- Version: 2.0.0
-- Stage: GA
-
-## 2. Highlights
-
-- Rewrote the plugin loader to support async plugins
-
-## 3. Acceptance Criteria
-
-| ID     | Description                                  | Priority |
-| ------ | -------------------------------------------- | -------- |
-| AC-001 | Async plugin loads in < 100 ms               | High     |
-| AC-002 | Legacy v1 config emits a deprecation warning | Medium   |
-```
-
-### 3. Validate from the CLI
-
-```bash
-validate-md --template release.template.md release.md
-# release.md: OK
-```
-
-### 4. Parse in code
+The same template parses a document into the data of the [example](#example):
 
 ```ts
-import { readFileSync } from "node:fs";
-import { parseTemplate } from "markdown-schema";
+import { readFileSync } from 'node:fs';
+import { parseTemplate } from 'markdown-schema';
 
-const templateRaw = readFileSync("release.template.md", "utf-8");
-const schema = parseTemplate(templateRaw);
-
-const raw = readFileSync("release.md", "utf-8");
-const doc = schema.parse(raw);
-// doc.metadata → { Version: "2.0.0", Stage: "GA" }
-// doc.highlights → ["Rewrote the plugin loader to support async plugins"]
-// doc.acceptanceCriteria → [{ ID: "AC-001", Description: "...", Priority: "High" }, ...]
+const schema = parseTemplate(readFileSync('release.template.md', 'utf-8'));
+const doc = schema.parse(readFileSync('release.md', 'utf-8'));
+// doc.metadata   → { Version: "2.1.0", Stage: "GA" }
+// doc.highlights → ["Dark mode for every page.", "Export to CSV."]
+// doc.fixes      → [{ ID: "FIX-1", Description: "The date picker skips February.", Priority: "High" }, …]
 ```
+
+`parseTemplate` runs in the browser and in Node. A document that does not match throws, with the reason.
 
 ### Cross-section invariants (`*.refine.ts`)
 
@@ -225,16 +243,16 @@ For rules that span multiple sections, add a sibling `*.refine.ts`:
 
 ```ts
 // release.refine.ts
-import type { z } from "zod";
+import type { z } from 'zod';
 
 export const refine = (doc: unknown, ctx: z.core.$RefinementCtx): void => {
   const d = doc as Record<string, unknown>;
-  const meta = d["metadata"] as Record<string, string>;
-  if (meta["Stage"] !== "GA" && !d["knownIssues"]) {
+  const meta = d['metadata'] as Record<string, string>;
+  if (meta['Stage'] !== 'GA' && !d['knownIssues']) {
     ctx.addIssue({
-      code: "custom",
-      path: ["knownIssues"],
-      message: "Non-GA releases must declare known issues",
+      code: 'custom',
+      path: ['knownIssues'],
+      message: 'Non-GA releases must declare known issues',
     });
   }
 };
@@ -250,11 +268,11 @@ validate-md --template release.template.md release.md
 Or load it manually in code:
 
 ```ts
-import { parseTemplate } from "markdown-schema";
+import { parseTemplate } from 'markdown-schema';
 // loadRefine reads the filesystem, so it ships on the node-only subpath.
-import { loadRefine } from "markdown-schema/node";
+import { loadRefine } from 'markdown-schema/node';
 
-const refine = await loadRefine("release.template.md");
+const refine = await loadRefine('release.template.md');
 const schema = parseTemplate(templateRaw, { refine });
 ```
 
@@ -269,8 +287,8 @@ block (`---\n---`) yields `{}`.
 ---
 name: Heritage
 colors:
-  primary: "#1A1C1E"
-  neutral: "#F7F5F2"
+  primary: '#1A1C1E'
+  neutral: '#F7F5F2'
 ---
 
 # Heritage
@@ -293,16 +311,15 @@ document including `doc.frontmatter`:
 
 ```ts
 // design.refine.ts
-import type { z } from "zod";
+import type { z } from 'zod';
 
 export const refine = (doc: unknown, ctx: z.core.$RefinementCtx): void => {
-  const fm = (doc as { frontmatter?: { colors?: Record<string, string> } })
-    .frontmatter;
-  if (!fm?.colors?.["primary"]) {
+  const fm = (doc as { frontmatter?: { colors?: Record<string, string> } }).frontmatter;
+  if (!fm?.colors?.['primary']) {
     ctx.addIssue({
-      code: "custom",
-      path: ["frontmatter", "colors", "primary"],
-      message: "primary color is required",
+      code: 'custom',
+      path: ['frontmatter', 'colors', 'primary'],
+      message: 'primary color is required',
     });
   }
 };
@@ -320,32 +337,36 @@ it inside the refine function. The parsed frontmatter also flows through
 ### Directive reference
 
 All directives live inside `<!-- TEMPLATE-ONLY: ... -->` blocks. The first
-non-whitespace token is the directive kind.
+non-whitespace token is the directive kind. Unknown directive **kinds** and
+unknown **modifiers** are both hard errors — a typo can't silently weaken a
+constraint.
 
 **Inline directives** (must close on the same line as the opener):
 
-| Directive                             | Schema produced                              |
-| ------------------------------------- | -------------------------------------------- | ------------------------------- |
-| `string; required`                    | `z.string().min(1)`                          |
-| `string; optional`                    | `z.string().optional()`                      |
-| `string; regex \`^…$\`; required`     | `z.string().regex(…)`                        |
-| `string; optional; default=<value>`   | falls back to `<value>` when blank           |
-| `string; optional; only-if Key=Value` | field present only when sibling equals value |
-| `enum: A \| B \| C; required`         | `z.enum(["A", "B", "C"])`                    |
-| `enum: A \\\| B \| C; required`       | choice `"A                                   | B"`, choice `"C"` (`\|` escape) |
+| Directive                             | Schema produced                                                                                                                |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `string; required`                    | `z.string().min(1)`                                                                                                            |
+| `string; optional`                    | `z.string().optional()`                                                                                                        |
+| `string; regex \`^…$\`; required`     | `z.string().regex(…)`                                                                                                          |
+| `string; default=<value>`             | fills `<value>` when blank; implies optional (empty `default=` = "blank allowed"; `required` + `default=` is a template error) |
+| `string; optional; only-if Key=Value` | field present only when sibling equals value; `required` + `only-if` is a template error                                       |
+| `enum: A \| B \| C; required`         | `z.enum(["A", "B", "C"])`                                                                                                      |
+| `enum: A \\\| B \| C; required`       | choice `"A \| B"`, choice `"C"` (`\\\|` escape)                                                                                |
 
 `regex` is a modifier of `string`, not a type of its own. A bare `regex` without a leading `string;` is a hard error.
 
 **Block directives** (own-line opener at column ≤ 3; body lines at column 0):
 
-| Directive                                              | Effect                                               |
-| ------------------------------------------------------ | ---------------------------------------------------- |
-| `freetext; required` / `freetext; optional`            | section body is free-form markdown (see below)       |
-| `row; min-rows: N; max-rows: N` + body of column specs | `z.array(z.object({…}))` — one entry per row         |
-| `section; optional`                                    | whole section heading may be absent                  |
-| `section; remove-if Key=Value`                         | section must be absent when expression holds         |
-| `section; min-groups: N` / `max-groups: N`             | for repeated sections, constrain the count of groups |
-| `guide` + body of `//` lines                           | author-facing prose; ignored by parser               |
+| Directive                                              | Effect                                                                                                                                                                                         |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `freetext; required` / `freetext; optional`            | section body is free-form markdown (see below)                                                                                                                                                 |
+| `row; min-rows: N; max-rows: N` + body of column specs | `z.array(z.object({…}))` — one entry per row; a column declared `string; key` is required and identifies its rows (values unique across the document; `key` + `optional` is a template error)  |
+| `section; optional`                                    | whole section heading may be absent (present ⇒ body must still conform)                                                                                                                        |
+| `section; optional; remove-if Key=Value`               | guarded section must be absent when the referenced labeled-list field equals `Value` (the key must be declared in exactly one labeled-list section); without `optional` the rule cannot be met |
+| `section; min-groups: N` / `max-groups: N`             | for repeated sections, constrain the count of groups                                                                                                                                           |
+| `section; min-items: N; max-items: N; regex \`…\``     | for task-list sections (`- [ ]` / `- [x]`), constrain the count of items and the pattern each item's text must match; on any other section kind it is a template error                         |
+| `guide` + body of `//` lines                           | author-facing prose; ignored by parser                                                                                                                                                         |
+| `document; open; unordered`                            | after the H1: `open` accepts undeclared `##` sections (free text, in `additionalSections`); `unordered` accepts the declared sections in any order (see below)                                 |
 
 **`row` column specs** use the same grammar as inline `string` / `enum:`
 directives — one column per body line, e.g.:
@@ -357,6 +378,53 @@ Description: string; required
 Priority: enum: Low | Medium | High; required
 -->
 ```
+
+A column declared `Done: checkbox` holds `[ ]` or `[x]` (`[X]` reads as checked) and the
+row object carries a boolean; any other cell text is a validation issue, and the JSON Schema
+types the column `boolean`. `checkbox` takes no `key`, `optional`, `regex`, `enum:` or
+`default=`. Use a task list for a plain checklist and a checkbox column for a keyed table
+whose rows are worked through.
+
+Required columns reject empty cells; `default=` fills a blank cell before
+validation. `min-rows` / `max-rows` (and `min-groups` / `max-groups` on
+`section`) must be non-negative integers — anything else is a template error.
+
+### Document-level options: `document`
+
+Templates are strict by default. One `document` directive between the H1 and the first H2
+relaxes that:
+
+```markdown
+# Plan
+
+<!-- TEMPLATE-ONLY: document; open; unordered -->
+```
+
+- `open`: an undeclared `##` section is accepted and parsed as free text. The parsed
+  document gains `additionalSections`, a list of `{ key, heading, text }` in document order
+  (absent when there is none). Declared sections are validated as usual, and a required one
+  must still be present.
+- `unordered`: the declared sections may appear in any order.
+
+A second `document` directive, or one inside a section, is a template error.
+
+### The summary directive
+
+A `>` blockquote between the H1 and the first `##` section whose text is an inline field
+directive declares the document's summary:
+
+```markdown
+# <!-- TEMPLATE-ONLY: string; required -->
+
+> <!-- TEMPLATE-ONLY: string; required; regex `^[^\n]{10,200}$` -->
+```
+
+A filled document carries its summary as a `>` blockquote in the same place. The summary is
+required or optional as the directive says, checked against its regex, and extracted as
+`summary` in the parse output; a blockquote wrapped over several lines is folded to one line
+first. Only `string` directives are allowed here, and a template may declare at most one
+summary. A template without the directive neither enforces nor extracts a summary — a
+blockquote in the preamble is then ignored.
 
 ### Author-facing prose: `guide` blocks
 
@@ -425,25 +493,39 @@ breaks, H3+ headings.
 
 ### Heading-level directive support
 
-| Heading level | Inline directive supported?                                           |
-| ------------- | --------------------------------------------------------------------- |
-| H1            | **Yes** — validates the document title (typed `string` / `enum:`)     |
-| H2            | **No** — H2 text is the JSON section key; keys must be fixed          |
-| H3            | **Yes, in repeated sections** — validates each per-group heading text |
+| Heading level    | Inline directive supported?                                               |
+| ---------------- | ------------------------------------------------------------------------- |
+| H1               | **Yes** — validates the document title (typed `string` / `enum:`)         |
+| `>` under the H1 | **Yes** — the [summary directive](#the-summary-directive) (`string` only) |
+| H2               | **No** — H2 text is the JSON section key; keys must be fixed              |
+| H3               | **Yes, in repeated sections** — validates each per-group heading text     |
 
 ### Section extractor inference
 
 The parser picks an extractor automatically from the section body shape:
 
-| Body shape                                  | Extractor    | Returns                                           |
-| ------------------------------------------- | ------------ | ------------------------------------------------- |
-| `freetext` directive present                | `freetext`   | `string` (markdown source, round-tripped)         |
-| Sub-headings (H3 inside H2)                 | `repeated`   | `{ heading: string; items: string[] }[]`          |
-| GFM table (with `row` directive)            | `table`      | `Record<string, string>[]`                        |
-| Labeled bullet list (`- Key: value`)        | `bulletList` | `Record<string, string \| undefined>`             |
-| GFM task list (`- [ ]` / `- [x]`)           | `taskList`   | `{ checked: boolean; text: string }[]`            |
-| Plain unordered bullet list                 | `bulletList` | `string[]`                                        |
-| None of the above (no `freetext` directive) | **error**    | "no recognized shape; add a `freetext` directive" |
+| Body shape                                  | Extractor    | Returns                                                                                                                                                                                       |
+| ------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `freetext` directive present                | `freetext`   | `string` (markdown source, round-tripped)                                                                                                                                                     |
+| Sub-headings (H3 inside H2)                 | `repeated`   | `{ heading: string; items: string[] }[]`                                                                                                                                                      |
+| GFM table                                   | `table`      | `Record<string, string \| boolean>[]` (with a `row` directive the columns are typed, `checkbox` ones as booleans; without one, each row gets a permissive `z.record(z.string(), z.string())`) |
+| Labeled bullet list (`- Key: value`)        | `bulletList` | extractor returns `string[]`; the labeled-list schema transforms it to `Record<string, string \| undefined>`                                                                                  |
+| GFM task list (`- [ ]` / `- [x]`)           | `taskList`   | `{ checked: boolean; text: string }[]`                                                                                                                                                        |
+| Plain unordered bullet list                 | `bulletList` | `string[]`                                                                                                                                                                                    |
+| None of the above (no `freetext` directive) | **error**    | "no recognized shape; add a `freetext` directive"                                                                                                                                             |
+
+**Cell text and links.** The value extractors — `table` body cells,
+`bulletList`, and `taskList` — stringify each cell with `cellText` (exported
+from the main entry point for programmatic consumers writing custom extractors),
+which matches `mdast-util-to-string` except that a Markdown `[label](url)` link
+yields its **url**, not its label. So a path citation written as a real link
+(`[4.foo.feature.md](../3.features/4.foo.feature.md)`) reaches a refine as the
+bare path `../3.features/4.foo.feature.md` — it renders as a native link while
+staying validatable. Inline code and plain text still yield their literal value
+(so a backticked path is unchanged), and table **header** cells keep
+`mdast-util-to-string` (header text is a label, never a citation). A
+reference-style link (`[label][ref]`) in a value cell is rejected — its target
+is unreachable, so citations must use inline links.
 
 ---
 
@@ -459,18 +541,22 @@ covered by template directives.
 ### Example
 
 A complete, runnable example lives in
-[`examples/programmatic/`](examples/programmatic/) — a release-notes schema that
+[`examples/programmatic/`](packages/markdown-schema/examples/programmatic/) — a release-notes schema that
 exercises **every** extractor and `defineDocSchema` option:
 
-| File                                                                      | Role                                                            |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| [`release-schema.ts`](examples/programmatic/release-schema.ts)            | The `defineDocSchema` schema (title, all extractors, `refine`) |
-| [`release.md`](examples/programmatic/release.md)                          | A filled document that validates against it                    |
-| [`run.ts`](examples/programmatic/run.ts)                                  | Parses `release.md` and prints the typed JSON                  |
-| [`output/release.json`](examples/programmatic/output/release.json)        | The emitted, validated structured payload                      |
+| File                                                                                        | Role                                                           |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [`release-schema.ts`](packages/markdown-schema/examples/programmatic/release-schema.ts)     | The `defineDocSchema` schema (title, all extractors, `refine`) |
+| [`release.md`](packages/markdown-schema/examples/programmatic/release.md)                   | A filled document that validates against it                    |
+| [`run.ts`](packages/markdown-schema/examples/programmatic/run.ts)                           | Parses `release.md` and prints the typed JSON                  |
+| [`output/release.json`](packages/markdown-schema/examples/programmatic/output/release.json) | The emitted, validated structured payload                      |
+
+The example lives in the repository (it is not part of the npm package). From
+`packages/markdown-schema/`:
 
 ```bash
-node --experimental-strip-types examples/programmatic/run.ts
+pnpm install && pnpm build   # build first — release-schema.ts imports the built dist/index.mjs
+node examples/programmatic/run.ts
 ```
 
 Two sections in that example are worth calling out, because they show the
@@ -489,7 +575,7 @@ checklist items require migration steps).
 <summary>Skeleton of the schema (see the file for the full version)</summary>
 
 ```ts
-import { z } from "zod";
+import { z } from 'zod';
 import {
   defineDocSchema,
   freetext,
@@ -498,24 +584,32 @@ import {
   optional,
   repeated,
   repeatedWhere,
-} from "markdown-schema";
+} from 'markdown-schema';
 
 export const ReleaseDoc = defineDocSchema({
-  title: { schema: z.string().regex(/^v\d+\.\d+\.\d+$/, "must be semver") },
+  title: { schema: z.string().regex(/^v\d+\.\d+\.\d+$/, 'must be semver') },
   sections: {
-    summary: { heading: "Summary", extract: freetext, schema: z.string().min(10) },
+    summary: {
+      heading: 'Summary',
+      extract: freetext,
+      schema: z.string().min(10),
+    },
     // …
     changes: {
-      heading: "Changes",
+      heading: 'Changes',
       extract: repeated({
-        shape: { description: freetext, params: optional(table), snippets: codeBlocks },
+        shape: {
+          description: freetext,
+          params: optional(table),
+          snippets: codeBlocks,
+        },
       }),
       schema: z.array(/* Change */ z.object({})).min(1),
     },
     migration: {
-      heading: "Migration",
+      heading: 'Migration',
       extract: repeatedWhere({
-        startsAt: (n) => n.type === "thematicBreak",
+        startsAt: (n) => n.type === 'thematicBreak',
         shape: { body: freetext },
       }),
       schema: z.array(z.object({ heading: z.string(), body: z.string().min(1) })),
@@ -530,13 +624,7 @@ export const ReleaseDoc = defineDocSchema({
 
 </details>
 
-### CLI support
-
-The `validate-md` CLI is **template mode only** — it derives the schema from a
-`*.template.md` file. Programmatic schemas (`defineDocSchema`) are used in code;
-call `.parse(raw)` directly, as the example above does. The old
-`--schema` / `--export` flags were removed in v0.2.0; the CLI now errors and
-points to `--template`.
+`validate-md` works with templates only; a programmatic schema is used in code, with `.parse(raw)` as above.
 
 ---
 
@@ -544,10 +632,10 @@ points to `--template`.
 
 The package has two entry points so the core API can bundle for the browser:
 
-| Import path                                | Environment   | Exports                                                            |
-| ------------------------------------------ | ------------- | ----------------------------------------------------------------- |
-| `markdown-schema`       | browser + node | `parseTemplate`, `defineDocSchema`, all extractors, `headingToKey`, `type RefineFunction` — pure mdast/zod, no node builtins |
-| `markdown-schema/node`  | node only     | `loadRefine` — reads the filesystem and dynamically imports `*.refine.ts` |
+| Import path            | Environment    | Exports                                                                                                                                                                                                                                                                                                          |
+| ---------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `markdown-schema`      | browser + node | `parseTemplate`, `defineDocSchema`, all extractors, `headingToKey`, `listRowKeys`, `templateJsonSchema`, the shape and data types (`TemplateShape`, `DocumentData`, `SectionValue`, …), `type RefineFunction`, and the [binding conventions](#binding-conventions) — pure mdast/zod/path rules, no node builtins |
+| `markdown-schema/node` | node only      | `loadRefine` — reads the filesystem and dynamically imports `*.refine.ts`                                                                                                                                                                                                                                        |
 
 The `validate-md` CLI is node-only and uses the `/node` entry internally.
 
@@ -557,51 +645,131 @@ The `validate-md` CLI is node-only and uses the `/node` entry internally.
 
 ### Template mode
 
-| Export                      | Entry   | Description                                                                |
-| --------------------------- | ------- | -------------------------------------------------------------------------- |
-| `parseTemplate(raw, opts?)` | `.`     | Parses a `*.template.md` string into a `{ parse(raw) }` schema object      |
-| `headingToKey(heading)`     | `.`     | Converts H2 text (e.g. `"1. Summary"`) to a camelCase key (`"summary"`)    |
-| `loadRefine(templatePath)`  | `/node` | Dynamically loads the sibling `*.refine.ts`; returns `undefined` if absent |
+| Export                                    | Entry   | Description                                                                                                                                                                                                       |
+| ----------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `parseTemplate(raw, opts?)`               | `.`     | Parses a `*.template.md` string into a `{ parse(raw, { tree }?), keyColumns, shape }` object; `tree` is the document's already-parsed mdast tree (remark, GFM, YAML frontmatter), so the text is not parsed again |
+| `parseTemplateAsync(raw, opts?)`          | `.`     | Like `parseTemplate`, but checks the template's regex patterns together with `recheck`'s asynchronous check instead of blocking once per pattern; resolves to the same schema object                              |
+| `generateDocument(shape, data, options?)` | `.`     | Renders `DocumentData` to markdown from a template's `shape`, validating the data first (see [Generating documents](#generating-documents))                                                                       |
+| `generateSkeleton(shape)`                 | `.`     | Writes a skeleton document from a template's `shape` alone: headings, table header rows with a placeholder row, labeled-list keys and `<...>` placeholders                                                        |
+| `templateJsonSchema(shape, identity?)`    | `.`     | Walks a template's `shape` into one draft 2020-12 JSON Schema of the `DocumentData` its `parse` emits (see [the template shape](#the-template-shape-and-json-schema))                                             |
+| `headingToKey(heading)`                   | `.`     | Converts H2 text (e.g. `"1. Summary"`) to a camelCase key (`"summary"`)                                                                                                                                           |
+| `loadRefine(templatePath)`                | `/node` | Dynamically loads the sibling `*.refine.ts`; returns `undefined` if absent                                                                                                                                        |
+
+### The template shape and JSON Schema
+
+`parseTemplate` compiles in two steps: it first infers the template's **shape** — everything
+the directives declare, as plain data — and then compiles the zod schema and extractors from
+it, so the shape is the single source of truth for what the template requires. The shape is
+published on the compiled template:
+
+```ts
+const template = parseTemplate(raw);
+template.shape; // TemplateShape
+```
+
+| Type               | What it holds                                                                                                                                                                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TemplateShape`    | `open`/`unordered`, the `title` (its pattern and the parts it was composed from: prefix, directive kind, choices), the `summary` field when declared, and one `SectionShape` per `##` section                                                                                                                |
+| `SectionShape`     | the section's `key` (via `headingToKey`), `heading`, `optional`, `removeIf`, and a kind-discriminated `body`                                                                                                                                                                                                 |
+| `SectionBodyShape` | `freetext`, `table` (with `ColumnShape[]` — every table carries its header row's columns, `declared` says whether a `row` directive set their rules — and `minRows`/`maxRows`), `labeled-list` (with `FieldShape[]`), `task-list` (with `minItems`/`maxItems`/`pattern`), `plain-list`, or `repeated-groups` |
+| `DocumentData`     | the parse output: `frontmatter`, `title`, `summary`, one `SectionValue` per declared section under its key, `additionalSections` for an open template                                                                                                                                                        |
+| `SectionValue`     | what each section kind extracts: a markdown string, row records, a labeled record, task items, plain strings, or `{ heading, items }` groups                                                                                                                                                                 |
+
+`templateJsonSchema(shape)` walks the shape into one draft 2020-12 JSON Schema describing
+that `DocumentData`, and `validate-md --template <t> --emit-schema` prints it. The schema
+documents the **structural contract only**: refine companions are code and are not
+represented, and neither are the conditional rules (`only-if`, `remove-if`) or the
+cross-document uniqueness of `key` columns — those hold on top of the structure. For every
+template, the generated schema accepts the `--emit-json` output of its valid documents.
+
+The schema says what it describes: each section carries a `description` from its heading,
+and `templateJsonSchema(shape, { name })` (what `--emit-schema` calls, with the template's
+file name read as its name) adds the root's `title`, `description` and
+`$id` (`urn:markdown-schema:template:<name>`), so a model handed the schema knows which
+document it is filling.
+
+### Generating documents
+
+`generateDocument(shape, data)` writes a document from the data `parse` returns: the
+frontmatter, the H1 title, the `>` summary, each declared section in template order, then
+the `additionalSections` of an `open` template. A section absent from the data is left out.
+
+**The round-trip law:** for any `data` that validates against a template,
+`parse(generateDocument(shape, data))` deep-equals `data`, and the generated text passes
+validation. An agent that writes data against the template's JSON Schema therefore writes a
+valid document by construction. `generateDocument` checks the precondition: it validates
+`data` against the shape first (the JSON Schema's structural contract, plus `only-if`,
+`remove-if` and unique `key` values) and throws, listing every failure with its section and
+field, before writing anything, so `{ "Done": "true" }` is refused rather than written as an
+unchecked box. Pass `{ validate: false }` when the data was validated already. A refine
+companion is code and is not run. The law runs one way: `generateDocument(shape, parse(doc))`
+need not reproduce `doc` byte for byte, because the parse side normalises (a link cell reads
+as its URL, freetext is re-serialised, `[X]` reads as `[x]`, a row's cells are trimmed).
+
+```ts
+import { generateDocument, generateSkeleton, parseTemplate } from 'markdown-schema';
+
+const { shape, parse } = parseTemplate(templateText);
+const text = generateDocument(shape, data); // data in the form parse returns; invalid data throws
+generateDocument(shape, data, { validate: false }); // already validated: skip the check
+parse(text); // deep-equals data
+generateSkeleton(shape); // a starting point with <...> placeholders; need not validate
+```
+
+- Tables are written unaligned, plain GFM; alignment is the formatter's job.
+- Values are written as escaped plain text, so a value that looks like markdown stays
+  literal text. **Links in generated cells are not supported:** `parse` reads a link as its
+  URL, so a link written into a cell would not round-trip. A `www.` address or e-mail address inside a
+  value is written as inline code, because GFM would otherwise read it back as a link.
+- A value that cannot sit on one line (the title, the summary, a heading, a table cell)
+  throws; a list item may carry soft line breaks.
+- A trailing table cell absent from the data is left out of the row, so a row with fewer
+  cells than headers round-trips; an absent cell followed by a present one is written empty
+  and parses back as an empty string.
+- Generation is API-only; there is no CLI command.
 
 **`parseTemplate` options (`opts`):**
 
-| Option   | Default | Description                                                          |
-| -------- | ------- | ------------------------------------------------------------------- |
-| `refine` | —       | Cross-section refinement callback to attach (usually `loadRefine`'s result) |
-| `file`   | —       | Source file path used in error messages                             |
+| Option            | Default | Description                                                                                                                                      |
+| ----------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `refine`          | —       | Cross-section refinement callback to attach (usually `loadRefine`'s result)                                                                      |
+| `file`            | —       | Source file path used in error messages                                                                                                          |
+| `orderedSections` | `true`  | Enforce that document sections appear in the template's order; set `false` to allow any order (a template declared `unordered` always allows it) |
 
 ### Extractors
 
-| Extractor                                        | Returns                                                                               |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `freetext`                                       | Section body serialized back to markdown (all node types preserved)                   |
-| `table`                                          | First GFM table as `Record<string, string>[]`; throws if absent                       |
-| `bulletList`                                     | Plain list items as `string[]`; labeled list as `Record<string, string \| undefined>` |
-| `taskList`                                       | GFM task list as `{ checked: boolean; text: string }[]`; throws if absent             |
-| `codeBlocks`                                     | All fenced code blocks as `{ lang: string \| null; value: string }[]`                 |
-| `rawNodes`                                       | The raw `RootContent[]` unchanged                                                     |
-| `fencedCodeWithMarker({ marker, markerLabel? })` | Code block following an HTML comment matching `marker`                                |
-| `optional(ex)`                                   | Wraps any extractor; returns `undefined` instead of throwing                          |
-| `repeated({ by?, shape })`                       | Splits by sub-heading; auto-detects depth                                             |
-| `repeatedWhere({ startsAt, shape, … })`          | Generic repeating groups driven by a node predicate                                   |
+| Extractor                                        | Returns                                                                                                                     |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `freetext`                                       | Section body serialized back to markdown (all node types preserved)                                                         |
+| `table`                                          | First GFM table as `Record<string, string>[]`; throws if absent                                                             |
+| `bulletList`                                     | List items as `string[]` (the labeled-list schema, not the extractor, converts to `Record<string, string \| undefined>`)    |
+| `taskList`                                       | GFM task list as `{ checked: boolean; text: string }[]`; throws if absent                                                   |
+| `cellText`                                       | Link-aware node stringification used by the value extractors; a Markdown link yields its url, a reference-style link throws |
+| `codeBlocks`                                     | All fenced code blocks as `{ lang: string \| null; value: string }[]`                                                       |
+| `rawNodes`                                       | The raw `RootContent[]` unchanged                                                                                           |
+| `fencedCodeWithMarker({ marker, markerLabel? })` | Code block following an HTML comment matching `marker`                                                                      |
+| `optional(ex)`                                   | Wraps any extractor; returns `undefined` instead of throwing                                                                |
+| `repeated({ by?, shape })`                       | Splits by sub-heading; auto-detects depth                                                                                   |
+| `repeatedWhere({ startsAt, shape, … })`          | Generic repeating groups driven by a node predicate                                                                         |
 
 ### Doc schema builder
 
-| Export                  | Description                                     |
-| ----------------------- | ----------------------------------------------- |
-| `defineDocSchema(spec)` | Returns `{ parse(raw: string): DocOf<S> }`      |
-| `SectionSpec<S>`        | Type for one section entry                      |
+| Export                  | Description                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `defineDocSchema(spec)` | Returns `{ parse(raw: string): DocOf<S> }`                                        |
+| `SectionSpec<S>`        | Type for one section entry                                                        |
 | `DocOf<S>`              | Infers the fully-typed parse result from a spec; includes `frontmatter?: unknown` |
 
 **`defineDocSchema` spec fields:**
 
-| Field          | Default  | Description                                          |
-| -------------- | -------- | ---------------------------------------------------- |
-| `title`        | —        | `{ schema }` — extracts the H1 as the document title |
-| `titleDepth`   | `1`      | Heading depth for the title                          |
-| `sectionDepth` | `2`      | Heading depth used as section boundaries             |
-| `sections`     | required | Map of output key → `SectionSpec`                    |
-| `refine`       | —        | `(doc, ctx) => void` — cross-section Zod refinement  |
+| Field          | Default  | Description                                                                                    |
+| -------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `title`        | —        | `{ schema }` — extracts the H1 as the document title                                           |
+| `summary`      | —        | `{ schema, required }` — extracts the `>` blockquote under the title as the document's summary |
+| `titleDepth`   | `1`      | Heading depth for the title                                                                    |
+| `sectionDepth` | `2`      | Heading depth used as section boundaries                                                       |
+| `sections`     | required | Map of output key → `SectionSpec`                                                              |
+| `refine`       | —        | `(doc, ctx) => void` — cross-section Zod refinement                                            |
 
 **`SectionSpec` fields:**
 
@@ -616,6 +784,11 @@ The `validate-md` CLI is node-only and uses the `/node` entry internally.
 
 ## CLI
 
+`validate-md` has two modes. With `--template` it validates the given files against one
+template; without it, it validates a whole tree ([directory mode](#directory-mode)).
+
+### Single-template mode
+
 ```bash
 # Validate one or more documents against a template
 validate-md --template component.template.md component.md
@@ -623,30 +796,106 @@ validate-md --template component.template.md *.md
 
 # Validate and emit the parsed document as JSON (exactly one input file)
 validate-md --template component.template.md --emit-json component.json component.md
+
+# Print the template's JSON Schema (draft 2020-12) to stdout
+validate-md --template component.template.md --emit-schema
 ```
 
 - `--template <file.template.md>` — required; the template that drives the schema.
-- `--emit-json <path>` — write the parsed document (sections, title, and
+- `--emit-json <path>` — write the parsed document (sections, title, summary, and
   `frontmatter`) to `<path>` as JSON. Requires exactly one input file.
+- `--emit-schema` — print the template's JSON Schema (see
+  [the template shape](#the-template-shape-and-json-schema)) to stdout and exit; takes no
+  input files and no other flag. The template's `*.refine.ts` is never loaded in this mode.
 - `--no-refine` — skip loading the sibling `*.refine.ts`. Use when validating
   **untrusted** templates (see [Security](#security)).
 
 A sibling `*.refine.ts` next to the template is loaded automatically (unless
-`--no-refine` is given).
+`--no-refine` is given). Unknown `--flags` and flags missing their value are
+usage errors — they are never silently treated as input files.
 
 Prints `<file>: OK` on success — or `<file>: OK (wrote <path>)` when
-`--emit-json` is set — or `<file>: schema validation failed` with one
-`path: message` line per Zod issue on failure. Exits `1` if any file fails, `0`
-otherwise.
+`--emit-json` is set. Failures come in two shapes: **structural** errors print
+as a single line (e.g. `component.md: Section "4. Inputs (Props)" must contain a
+table`), while constraint violations print `<file>: schema validation failed`
+followed by one `path: message` line per Zod issue. Exits `1` if any file
+fails, `0` otherwise.
 
 All status lines are written to **stderr**, so `--emit-json /dev/stdout` yields
 clean JSON on stdout (pipeable to `jq`).
 
+### Directory mode
+
+```bash
+validate-md                       # (no arguments) prints the usage; `validate-md .` validates the tree
+validate-md docs skills/x/SKILL.md
+validate-md docs --root . --ignore vendor --ignore generated/out --json
+```
+
+`validate-md [<path>...] [--root <dir>] [--ignore <dir-or-path>]... [--no-refine] [--json]
+[--verbose]` lists what the paths can bind to once, builds the template catalog from it, binds
+every Markdown file listed to its template ([see below](#binding-conventions)), compiles each
+template once, and validates each bound document against its template.
+
+- **Root and paths.** `--root` defaults to the nearest ancestor holding `.git` (a directory or
+  a file, so worktrees count), else the current directory. Documents are validated under the
+  given paths (default `.`), which must lie inside the root: a document can bind to a template
+  outside the paths being checked.
+- **What is read.** Only the given paths (a file itself, a folder walked) and the templates
+  folder of each of their ancestors, up to the root, with the directory each template link
+  points to. That is everything a binding can depend on, so a run costs what the paths cost,
+  not what the repository costs. When a path is the root and the root is a Git work tree, the
+  files come from `git ls-files --cached --others --exclude-standard`, so ignored folders
+  (build output, agent worktrees) are never visited; outside Git the root is walked from disk.
+- **Skipped.** `.git`, `node_modules`, `dist`, and whatever `--ignore` names: a directory name (matched
+  anywhere) or a path relative to the root. Symbolic links are never followed (a template link's
+  target directory is read, when nothing on the way to it is a link). A run on the root of a Git
+  work tree (`validate-md .`, `.git` in the root) also skips what Git ignores, nested
+  repositories and submodules; a run on a folder walks the disk and does not.
+- **Validated.** Every bound document. A template that does not compile is reported once and
+  its documents are reported as not validated. Files in a template's own `examples/` folder
+  are validated against that template. Sibling `*.refine.ts` files are loaded unless
+  `--no-refine` is given.
+- **Output.** One line per bound document (`path: OK`, or the failure as in single-template
+  mode), ambiguous files with their candidates, template errors, and a summary such as
+  `12 documents: 11 OK, 1 failed; 1 ambiguous; 40 unbound`. A template link that stands for no template (its
+  target lacks `<name>.template.md`, or the way there crosses a symbolic link or a skipped folder)
+  is printed as a `Warning: template link ...` line and listed in `--json`'s
+  `unreadTemplateLinks`; it does not change the exit code. `--verbose` also lists the unbound
+  files. `--json` prints the whole result to stdout instead. Paths are relative to the root.
+- **Exit code.** `0` when everything bound validates and nothing is ambiguous; `1` for a
+  failed document, an ambiguous file, a template that does not compile, or a root or path
+  that is refused.
+
+### Binding conventions
+
+Directory mode binds a document to a template by file name and tree proximity. They are pure
+rules over a path list, exported from the `.` entry (`listTemplates`, `bindDocuments`, `listFilePaths`,
+`templateNameOf`, `templateFolderName`, `templateFolderNames`);
+the engine (`parseTemplate` and the rest) never uses them.
+
+- **Catalog.** A template is `markdown-schema-templates/<name>/<name>.template.md` anywhere
+  in the tree, or a link in a templates folder (see **Links**). A templates folder that is itself a
+  symbolic link is not read.
+- **Name.** A file `[<n>.][<artifact>.]<name>.md` asks for the template `<name>`: the last
+  segment of its name after an optional level number (`2.billing.constitution.md` asks for
+  `constitution`, `plan.md` for `plan`). A name in capitals (`CHANGELOG.md`, `README.md`) asks for
+  the template of that name and, when no template has it, for the lower-case one: `CHANGELOG.md`
+  binds to `changelog`.
+- **Proximity.** Walking up from the document's directory, the first ancestor whose own
+  `markdown-schema-templates/` folder holds a template of that name decides; its subtree is not
+  searched.
+- **Links.** A symbolic link `<templates folder>/<name>` to a directory that holds
+  `<name>.template.md` counts as that template (`listFilePaths` turns a listing into the file
+  list); a folder of relative links shares templates that live elsewhere. The template is read
+  through the link. Other symbolic links are never followed.
+- A file inside a templates folder is never bound, except its template's `examples/`.
+
 ### Requirements
 
-- **Node.js ≥ 22.18**. The CLI loads the sibling `*.refine.ts` with Node's
+- **Node.js ≥ 24**. The CLI loads the sibling `*.refine.ts` with Node's
   built-in [type stripping](https://nodejs.org/api/typescript.html#type-stripping)
-  (unflagged from 22.18 / 23.6 onward). No `tsx`, `ts-node`, or build step
+  (on by default). No `tsx`, `ts-node`, or build step
   needed.
 - TypeScript syntax that erases to plain JavaScript works as-is (`type`,
   `interface`, type annotations, `as`, `satisfies`). Runtime-emitting syntax
@@ -679,7 +928,9 @@ Every such pattern is routed through a ReDoS guard that runs at schema-build
 time: it caps the pattern length and statically analyses it, rejecting
 exponential-backtracking patterns outright and allowing only low-degree
 (≤ 2) polynomial patterns. An unsafe pattern fails template parsing with a
-`DirectiveError` rather than hanging the validator on a crafted document.
+`DirectiveError` rather than hanging the validator on a crafted document. The analysis
+is slow, so its verdict is memoized per pattern source (at most 1,024 sources; the memo is
+cleared when full), and templates that repeat a pattern pay for it once.
 
 ### Frontmatter and untrusted keys
 
@@ -704,8 +955,13 @@ without confining them yourself.
 The toolkit composes each section's Zod schema into a single `z.object` and
 validates the whole document at once, so refinement callbacks receive a
 fully-typed document and errors arrive as a single `ZodError` tree. Structural
-failures (missing required section, malformed table) throw a plain `Error`
-before Zod runs — structure is checked first, semantics second.
+failures (missing required section, extra/unordered sections, malformed table)
+throw a plain `Error` before Zod runs — structure is checked first, semantics
+second. Template-side faults throw `DirectiveError`, which carries and prefixes
+`path:line:col` whenever position information is available; `validate-md` does not pass the
+template's file to the parser, so the CLI prints that prefix as a literal `template.md:<line>:<col>:` after
+`Error: invalid template <file>:`, and an error found after the directive text was read (an unknown kind or
+modifier) has no position.
 
 In template mode, `parseTemplate` walks the mdast tree, collects
 `<!-- TEMPLATE-ONLY: -->` directives, and infers an extractor + Zod schema for
@@ -717,4 +973,35 @@ to the template syntax.
 YAML frontmatter is parsed via `remark-frontmatter` + `yaml` and lifted onto
 `doc.frontmatter` alongside the title and sections. It is exposed but not
 schema-validated by the parser; frontmatter rules belong in `*.refine.ts`.
-````
+
+---
+
+## Repository layout
+
+| Path                        | What it holds                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/markdown-schema/` | The package: source (`libs/`), the `validate-md` command (`bin/`, `app/`), the agent skill (`.claude/skills/`), examples, tests and the package README |
+| `CHANGELOG.md`              | Release notes, one section per version                                                                                                                 |
+
+To run the tests, install once and run them from the package folder (Node 24 and pnpm):
+
+```bash
+pnpm install
+cd packages/markdown-schema
+pnpm test        # vitest
+pnpm build       # tsdown → dist/
+```
+
+## About this repository
+
+This repository is a read-only copy of the `markdown-schema` part of a private repository, made at each release. It holds the source of the version 0.13.7.
+
+| Package | Version | Folder |
+| ------- | ------- | ------ |
+| `markdown-schema` | 0.13.7 | `packages/markdown-schema` |
+
+The packages are published to npm from the maintainer's machine, from the tagged commit `v<version>` of this repository.
+
+This repository has no lockfile: a lockfile made by the private repository would name its private registry. Install with `pnpm install`; the packages of this repository link to each other as a workspace.
+
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release

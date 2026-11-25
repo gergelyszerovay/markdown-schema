@@ -1,17 +1,15 @@
-# Build output
-dist/
-.turbo/
-coverage/
-
-# Dependencies
 node_modules/
-
-# TS incremental build info
+dist/
+coverage/
+.turbo/
+/temp
 tsconfig.tsbuildinfo
-
-# Local scratch / private notes (not part of the package)
-p/
-
-# Local overrides
+.env
+.env.*
+!.env.example
 *.local
-*.local.*
+
+# Written by install-skills (the prepare script)
+/.claude/skills
+/.agents/skills
+/markdown-schema-templates

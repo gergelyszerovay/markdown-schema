@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/tsdoc/v0/tsdoc.schema.json",
+  "extends": [],
+  "tagDefinitions": [
+    { "tagName": "@owns", "syntaxKind": "block" },
+    { "tagName": "@lifetime", "syntaxKind": "block" },
+    { "tagName": "@cleanup", "syntaxKind": "block" },
+    { "tagName": "@concurrency", "syntaxKind": "block" },
+    { "tagName": "@failure", "syntaxKind": "block" }
+  ]
+}

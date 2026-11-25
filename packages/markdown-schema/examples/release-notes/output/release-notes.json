@@ -1,0 +1,22 @@
+{
+  "title": "Release Notes: Widget v2",
+  "metadata": {
+    "Version": "2.0.0",
+    "Stage": "GA"
+  },
+  "highlights": [
+    "Rewrote the plugin loader to support async plugins"
+  ],
+  "acceptanceCriteria": [
+    {
+      "ID": "AC-001",
+      "Description": "Async plugin loads in < 100 ms",
+      "Priority": "High"
+    },
+    {
+      "ID": "AC-002",
+      "Description": "Legacy v1 config emits a deprecation warning",
+      "Priority": "Medium"
+    }
+  ]
+}

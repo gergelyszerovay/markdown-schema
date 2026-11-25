@@ -1,0 +1,96 @@
+{
+  "name": "markdown-schema",
+  "version": "0.13.7",
+  "description": "Turn a Markdown template into a schema and validate Markdown documents against it.",
+  "type": "module",
+  "license": "MIT",
+  "releaseTools": {
+    "npmName": "markdown-schema"
+  },
+  "author": "Gergely Szerovay",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gergelyszerovay/markdown-schema.git",
+    "directory": "packages/markdown-schema"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "architecture": {
+    "profile": "node-block-architecture",
+    "coverage": "specified"
+  },
+  "imports": {
+    "#libs/*": "./libs/*/src/index.ts"
+  },
+  "exports": {
+    ".": {
+      "source": "./libs/markdown-schema/src/package.entry.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./node": {
+      "source": "./libs/markdown-schema/src/package-node.entry.ts",
+      "types": "./dist/node.d.mts",
+      "default": "./dist/node.mjs"
+    },
+    "./skills/*": "./.claude/skills/*"
+  },
+  "bin": {
+    "validate-md": "bin/validate-md.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    ".claude/skills",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint:tsdoc": "check-tsdoc-tags .",
+    "lint:placement": "check-block-placement .",
+    "test": "vitest run",
+    "publint": "publint --strict",
+    "validate-md": "node app/validate-md.main.ts",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@types/mdast": "^4.0.4",
+    "mdast-util-frontmatter": "^2.0.1",
+    "mdast-util-gfm": "^3.0.0",
+    "mdast-util-to-markdown": "^2.0.0",
+    "mdast-util-to-string": "^4.0.0",
+    "recheck": "^4.5.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.0",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10",
+    "@types/node": "^24.19.2",
+    "ajv": "^8.20.0",
+    "@gergelyszerovay/architecture-skills": "^0.8.1",
+    "eslint": "^10",
+    "eslint-config-prettier": "^10",
+    "eslint-plugin-jsdoc": "^64",
+    "eslint-plugin-n": "^18",
+    "eslint-plugin-tsdoc": "^0.5.3",
+    "prettier": "^3",
+    "publint": "^0.3.24",
+    "tsdown": "^0.23.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8",
+    "vitest": "^4.1.5"
+  },
+  "changelog": {
+    "group": "markdown-schema"
+  }
+}

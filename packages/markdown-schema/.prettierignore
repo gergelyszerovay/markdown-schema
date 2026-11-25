@@ -1,0 +1,9 @@
+dist/
+node_modules/
+# The demos the README walks through, and fixtures that are malformed on purpose: the specs
+# read them byte for byte.
+examples/
+libs/markdown-schema/src/lib/testing/fixtures/
+**/__snapshots__/
+# The person's notes
+.notes/
