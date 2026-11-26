@@ -5,6 +5,12 @@ Release notes for those who consume a version.
 
 ## Unreleased
 
+## 0.13.9
+
+### Changed
+
+- **The README names `install-package-skills`** as the way to install the skill from the npm package.
+
 ## 0.13.8
 
 ### Changed

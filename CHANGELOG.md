@@ -4,6 +4,12 @@ Release notes of the markdown-schema group, one section per release, generated f
 
 ## Unreleased
 
+## 0.13.9
+
+### Changed
+
+- **markdown-schema: The README names `install-package-skills`** as the way to install the skill from the npm package.
+
 ## 0.13.8
 
 ### Changed

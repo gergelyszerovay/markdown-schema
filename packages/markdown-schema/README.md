@@ -173,8 +173,8 @@ the agent gets these workflows right without re-deriving the rules each time.
 The skill ships in the npm package (exported as `./skills/*`). Two ways to copy it into a
 project:
 
-- With [`package-skills`](https://github.com/gergelyszerovay/package-skills): list the package
-  in `devSkills` of the root `package.json` and run `package-skills`.
+- With [`install-package-skills`](https://github.com/gergelyszerovay/install-package-skills): list the package
+  in `devSkills` of the root `package.json` and run `install-package-skills`.
 
   ```json
   { "devSkills": ["markdown-schema"] }

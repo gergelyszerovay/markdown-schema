@@ -1,6 +1,6 @@
 {
   "name": "markdown-schema",
-  "version": "0.13.8",
+  "version": "0.13.9",
   "description": "Turn a Markdown template into a schema and validate Markdown documents against it.",
   "type": "module",
   "license": "MIT",

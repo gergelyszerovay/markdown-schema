@@ -173,8 +173,8 @@ the agent gets these workflows right without re-deriving the rules each time.
 The skill ships in the npm package (exported as `./skills/*`). Two ways to copy it into a
 project:
 
-- With [`package-skills`](https://github.com/gergelyszerovay/package-skills): list the package
-  in `devSkills` of the root `package.json` and run `package-skills`.
+- With [`install-package-skills`](https://github.com/gergelyszerovay/install-package-skills): list the package
+  in `devSkills` of the root `package.json` and run `install-package-skills`.
 
   ```json
   { "devSkills": ["markdown-schema"] }
@@ -994,11 +994,11 @@ pnpm build       # tsdown → dist/
 
 ## About this repository
 
-This repository is a read-only copy of the `markdown-schema` part of a private repository, made at each release. It holds the source of the version 0.13.8.
+This repository is a read-only copy of the `markdown-schema` part of a private repository, made at each release. It holds the source of the version 0.13.9.
 
 | Package | Version | Folder |
 | ------- | ------- | ------ |
-| `markdown-schema` | 0.13.8 | `packages/markdown-schema` |
+| `markdown-schema` | 0.13.9 | `packages/markdown-schema` |
 
 The packages are published to npm from the maintainer's machine, from the tagged commit `v<version>` of this repository.
 
