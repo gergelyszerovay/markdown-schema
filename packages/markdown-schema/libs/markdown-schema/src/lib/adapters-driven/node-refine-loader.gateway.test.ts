@@ -59,4 +59,35 @@ describe('loadRefine: compiled companion', () => {
       }
     },
   );
+
+  it(
+    'loads a <stem>.refine.mjs when there is neither a .refine.ts nor a .refine.js',
+    {
+      tags: ['scenario'],
+      meta: {
+        spec: 'node-refine-loader-loads-refine-mjs',
+        arrange: 'a template whose only companion is a compiled .refine.mjs',
+        act: 'the refine function is loaded',
+        assert: 'it is the mjs file’s refine export',
+      },
+    },
+    async () => {
+      let dir: string;
+      let template: string;
+      arrange: {
+        dir = await mkdtemp(join(tmpdir(), 'md-schema-refine-mjs-'));
+        template = join(dir, 't.template.md');
+        await writeFile(template, '# T\n', 'utf-8');
+        await writeFile(join(dir, 't.refine.mjs'), 'export const refine = () => {};\n', 'utf-8');
+      }
+      let refine: Awaited<ReturnType<typeof loadRefine>>;
+      act: {
+        refine = await loadRefine(template);
+      }
+      assert: {
+        expect(typeof refine).toBe('function');
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });

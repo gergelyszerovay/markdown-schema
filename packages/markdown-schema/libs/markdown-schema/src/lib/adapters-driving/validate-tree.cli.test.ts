@@ -61,6 +61,8 @@ function setUp(result: ValidateTreeResult): Context {
         paths: ['docs'],
         root: '/repo',
         ignore: ['vendor'],
+        templatePackages: ['@acme/templates'],
+        noTemplatePackages: false,
         noRefine: true,
         json,
         verbose: false,
@@ -95,7 +97,14 @@ describe('makeValidateTreeCommand', () => {
       }
       assert: {
         expect(context.received).toEqual([
-          { root: '/repo', paths: ['docs'], ignore: ['vendor'], noRefine: true },
+          {
+            root: '/repo',
+            paths: ['docs'],
+            ignore: ['vendor'],
+            templatePackages: ['@acme/templates'],
+            noTemplatePackages: false,
+            noRefine: true,
+          },
         ]);
         expect(context.printed).toEqual([
           'a.md: OK',

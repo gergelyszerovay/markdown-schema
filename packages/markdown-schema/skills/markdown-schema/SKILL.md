@@ -2,7 +2,7 @@
 name: markdown-schema
 description: Derive, author, fill, or validate `*.template.md` files. Use when the user wants to derive a template from a few example documents, design or change a template, complete (fill) a template with real content, validate a filled document against its template using the `validate-md` CLI, or debug a `validate-md` error message. Covers these four workflows, and where templates live and how documents bind to them, for the `markdown-schema` package.
 metadata:
-  version: '0.1.4'
+  version: '0.1.5'
 ---
 
 # Skill: markdown-schema
@@ -335,7 +335,11 @@ template, not the document.
 1. In directory mode there is nothing to locate: `validate-md` binds each document to
    its template by the rule in `template-structure.guideline.md` (name and proximity).
    To see the binding, run `validate-md <file> --json`: each entry of `documents` names its
-   `templatePath`; `--verbose` also lists the unbound files.
+   `templatePath` (`<key>/<path>` for a template of a listed package); `--verbose` also lists
+   the unbound files.
+   A template of an installed package binds only when the root `package.json` lists the
+   package in `markdownSchema.templatePackages` (or the run passes `--template-package <key>`);
+   an unbound document whose template lives in a dependency usually needs that entry.
 2. For a document outside any catalog, pass the template explicitly.
 3. Check for a sibling `*.refine.ts` — its rules are enforced by the schema.
 
@@ -346,7 +350,7 @@ document under the paths, reports ambiguous and unbound files, and compiles each
 once:
 
 ```sh
-validate-md <path>...                      # files or folders; --root <dir>, --ignore <dir-or-path>, --no-refine, --json, --verbose
+validate-md <path>...                      # files or folders; --root <dir>, --ignore <dir-or-path>, --template-package <key>, --no-template-packages, --no-refine, --json, --verbose
 validate-md --template <template-file> <doc-file>   # one document, for one that no catalog binds
 ```
 
@@ -382,6 +386,12 @@ prefix, whatever the file is called; errors found later (an unknown kind or modi
 Error: invalid template component.template.md: template.md:42:9: inline TEMPLATE-ONLY directive must close on the same line; "-->" not found before line end
 Error: invalid template component.template.md: unknown TEMPLATE-ONLY directive kind: 'pik'
 ```
+
+**Template package error** — `Error: template package <key> …` ends a directory run before any
+document is read: the root `package.json` lists (or `--template-package` names) a package it does
+not declare in `dependencies` or `devDependencies`, that is not installed (run the install), or
+whose installed manifest names another package. Fix the list or the dependency; to validate
+without packages for a moment, pass `--no-template-packages`.
 
 ### 4. Triage by error message
 
@@ -462,8 +472,11 @@ The catalog is every `markdown-schema-templates/<name>/<name>.template.md`. A do
 `[<n>.][<artifact>.]<template>.md` binds to the closest template of that name: walk up from
 its directory, looking in each ancestor's own templates folder; the first ancestor that has
 one decides, so a closer template shadows a farther one of the same name. A name in capitals
-falls back to lower case (`CHANGELOG.md` → `changelog`). A folder of relative symbolic links
-(one per template) shares templates that live elsewhere. See `template-structure.guideline.md`.
+falls back to lower case (`CHANGELOG.md` → `changelog`). The templates of the installed
+packages the root `package.json` lists in `markdownSchema.templatePackages` come after the
+root's own folder, printed as `<key>/<path>`. A folder of relative symbolic links (one per
+template) shares templates that live elsewhere in the tree. See
+`template-structure.guideline.md`.
 
 ### Refine & the filesystem
 

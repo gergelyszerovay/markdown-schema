@@ -21,6 +21,10 @@ export type ValidateMdArgs =
       paths: string[];
       root: string | undefined;
       ignore: string[];
+      /** `--template-package <key>` values: packages read for templates in this run. */
+      templatePackages: string[];
+      /** `--no-template-packages`: ignore the root's list and `templatePackages`. */
+      noTemplatePackages: boolean;
       noRefine: boolean;
       json: boolean;
       verbose: boolean;

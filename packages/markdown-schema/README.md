@@ -830,12 +830,15 @@ clean JSON on stdout (pipeable to `jq`).
 validate-md                       # (no arguments) prints the usage; `validate-md .` validates the tree
 validate-md docs skills/x/SKILL.md
 validate-md docs --root . --ignore vendor --ignore generated/out --json
+validate-md . --template-package @acme/doc-templates   # also read that package's templates, this run only
 ```
 
-`validate-md [<path>...] [--root <dir>] [--ignore <dir-or-path>]... [--no-refine] [--json]
-[--verbose]` lists what the paths can bind to once, builds the template catalog from it, binds
-every Markdown file listed to its template ([see below](#binding-conventions)), compiles each
-template once, and validates each bound document against its template.
+`validate-md [<path>...] [--root <dir>] [--ignore <dir-or-path>]... [--template-package <key>]...
+[--no-template-packages] [--no-refine] [--json] [--verbose]` lists what the paths can bind to
+once, builds the template catalog from it and from the [template packages](#template-packages)
+the root lists, binds every Markdown file listed to its template
+([see below](#binding-conventions)), compiles each template once, and validates each bound
+document against its template.
 
 - **Root and paths.** `--root` defaults to the nearest ancestor holding `.git` (a directory or
   a file, so worktrees count), else the current directory. Documents are validated under the
@@ -854,8 +857,8 @@ template once, and validates each bound document against its template.
   repositories and submodules; a run on a folder walks the disk and does not.
 - **Validated.** Every bound document. A template that does not compile is reported once and
   its documents are reported as not validated. Files in a template's own `examples/` folder
-  are validated against that template. Sibling `*.refine.ts` files are loaded unless
-  `--no-refine` is given.
+  are validated against that template. Sibling `*.refine.ts` (or `.refine.js`, `.refine.mjs`)
+  files are loaded unless `--no-refine` is given.
 - **Output.** One line per bound document (`path: OK`, or the failure as in single-template
   mode), ambiguous files with their candidates, template errors, and a summary such as
   `12 documents: 11 OK, 1 failed; 1 ambiguous; 40 unbound`. A template link that stands for no template (its
@@ -864,8 +867,47 @@ template once, and validates each bound document against its template.
   `unreadTemplateLinks`; it does not change the exit code. `--verbose` also lists the unbound
   files. `--json` prints the whole result to stdout instead. Paths are relative to the root.
 - **Exit code.** `0` when everything bound validates and nothing is ambiguous; `1` for a
-  failed document, an ambiguous file, a template that does not compile, or a root or path
-  that is refused.
+  failed document, an ambiguous file, a template that does not compile, or a root, path or
+  template package that is refused.
+
+#### Template packages
+
+A repository that validates its documents against the templates of an installed package lists
+the package in its root `package.json` (the `--root`), instead of copying or linking its
+templates:
+
+```json
+{
+  "devDependencies": { "@acme/doc-templates": "^1.2.0" },
+  "markdownSchema": { "templatePackages": ["@acme/doc-templates"] }
+}
+```
+
+- **The list.** Each entry is the key of a dependency the root declares in `dependencies` or
+  `devDependencies` (an npm alias by its key). A name the root does not declare, or that is not
+  installed, stops the run with an error naming it (exit `1`). Without the field, or with `[]`,
+  no package is read; a new dependency never adds templates unasked.
+- **What is read.** The package is `<root>/node_modules/<key>`: that one path may be a symbolic
+  link (pnpm's), and its real path is read; its `package.json` must name the declared package
+  (the alias's target for an alias). Only its template folders are listed:
+  `markdown-schema-templates/<name>/` and `skills/<skill>/markdown-schema-templates/<name>/`, each
+  with `<name>.template.md`. Inside the package no symbolic link is followed and `node_modules`
+  and `dist` are skipped.
+- **Where they bind.** A package's templates sit above the root: proximity tries the folders of
+  the document's ancestors first, the root's own `markdown-schema-templates/` last among them,
+  and then the packages. A template of the same name in the root's folder overrides a package's.
+  Two package templates of one name (two packages, or two skills of one) make a document that
+  asks for it ambiguous, unless a folder of the tree decides first.
+- **Paths.** A package template is printed as `<key>/<path in the package>`
+  (`@acme/doc-templates/skills/docs/markdown-schema-templates/guide/guide.template.md`), in the text
+  output and in `--json`, never as a path into `node_modules/.pnpm/`.
+- **Refine companions.** A package template's `*.refine.js` or `*.refine.mjs` runs as any other
+  (`--no-refine` skips it). A `*.refine.ts` in a package is a template error: Node does not strip
+  types under `node_modules`, so a package ships its refines compiled. The code runs because the
+  root declares and lists the package (see [Security](#security)).
+- **Flags.** `--template-package <key>` (repeatable) adds a package for one run;
+  `--no-template-packages` ignores the field and the flag. Single-template mode (`--template`) never
+  reads packages.
 
 ### Binding conventions
 
@@ -875,8 +917,10 @@ rules over a path list, exported from the `.` entry (`listTemplates`, `bindDocum
 the engine (`parseTemplate` and the rest) never uses them.
 
 - **Catalog.** A template is `markdown-schema-templates/<name>/<name>.template.md` anywhere
-  in the tree, or a link in a templates folder (see **Links**). A templates folder that is itself a
-  symbolic link is not read.
+  in the tree, or a link in a templates folder (see **Links**), or a template of a listed package
+  (`bindDocuments` and `listTemplates` take the packages' template folders as `packages`, a list of
+  `{ package, paths }`; reading them is the CLI's). A templates folder that is itself a symbolic
+  link is not read.
 - **Name.** A file `[<n>.][<artifact>.]<name>.md` asks for the template `<name>`: the last
   segment of its name after an optional level number (`2.billing.constitution.md` asks for
   `constitution`, `plan.md` for `plan`). A name in capitals (`CHANGELOG.md`, `README.md`) asks for
@@ -884,7 +928,8 @@ the engine (`parseTemplate` and the rest) never uses them.
   binds to `changelog`.
 - **Proximity.** Walking up from the document's directory, the first ancestor whose own
   `markdown-schema-templates/` folder holds a template of that name decides; its subtree is not
-  searched.
+  searched. The listed packages come after the root: they decide only when no folder of the tree
+  has the name, and two of them with the name make the document ambiguous.
 - **Links.** A symbolic link `<templates folder>/<name>` to a directory that holds
   `<name>.template.md` counts as that template (`listFilePaths` turns a listing into the file
   list); a folder of relative links shares templates that live elsewhere. The template is read
@@ -918,6 +963,9 @@ arbitrary code** shipped beside it. The path is confined to the sibling file (no
 traversal), but the feature is code-execution by design.
 
 - CLI: pass `--no-refine` to skip it.
+- A [template package](#template-packages)'s `*.refine.js` runs too: it is the code of an
+  installed dependency that the root declares and lists, so listing a package trusts it as
+  installing it does.
 - Programmatic: simply don't call `loadRefine` / don't pass `refine` to
   `parseTemplate`. `parseTemplate(raw)` alone never loads or runs any file.
 

@@ -2,6 +2,7 @@ import { baseName } from './base-name.rules.ts';
 import type { DirectoryEntry } from './directory-entry.model.ts';
 import { joinPath } from './join-path.rules.ts';
 import { parentDir } from './parent-dir.rules.ts';
+import { refineExtensions } from './refine-extensions.model.ts';
 import { templateFolderNames } from './template-folder-names.model.ts';
 
 /**
@@ -22,7 +23,10 @@ export function listFilePaths(entries: readonly DirectoryEntry[]): string[] {
     if (entry.kind !== 'symlink' || entry.target === undefined) continue;
     if (!templateFolderNames.includes(baseName(parentDir(entry.path)))) continue;
     const name = baseName(entry.path);
-    for (const stem of [`${name}.template.md`, `${name}.refine.ts`, `${name}.refine.js`]) {
+    for (const stem of [
+      `${name}.template.md`,
+      ...refineExtensions.map((extension) => `${name}.refine.${extension}`),
+    ]) {
       if (files.has(joinPath(entry.target, stem))) linked.push(joinPath(entry.path, stem));
     }
   }

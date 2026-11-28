@@ -5,6 +5,25 @@ Release notes for those who consume a version.
 
 ## Unreleased
 
+## 0.13.10
+
+### Added
+
+- **`validate-md` reads the templates of the packages a repository lists.** In directory mode, the root
+  `package.json` may hold `"markdownSchema": { "templatePackages": ["<dependency key>"] }`: each listed package
+  (a declared dependency, an npm alias by its key) adds its `markdown-schema-templates/<name>/` and
+  `skills/<skill>/markdown-schema-templates/<name>/` templates as a level above the root, so a repository no longer
+  copies or links them. A template in the root's own folder overrides a package's; two package templates of one name
+  make a document ambiguous. A package template is printed as `<key>/<path in the package>`, in the text output and in
+  `--json`. A name the root does not declare, or that is not installed, stops the run with an error naming it. A
+  package's `*.refine.js` runs (`--no-refine` skips it); a `*.refine.ts` there is a template error.
+- **`--template-package <key>` and `--no-template-packages`.** The first (repeatable) adds a package for one run; the
+  second reads no package. Both are directory-mode flags.
+- **`bindDocuments` and `listTemplates` take `packages`**, a list of `{ package, paths }` (the exported type
+  `TemplatePackage`): the template folders of the listed packages, as the CLI reads them. A package template carries
+  its key in `CatalogTemplate.package` and `DocumentBinding.templatePackage`.
+- **A refine companion may be `<name>.refine.mjs`**, looked for after `.refine.ts` and `.refine.js`.
+
 ## 0.13.9
 
 ### Changed

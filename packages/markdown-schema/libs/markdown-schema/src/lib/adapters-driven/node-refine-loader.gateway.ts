@@ -3,10 +3,11 @@ import { basename, dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { RefineFunction } from '../core/refine-function.model.ts';
 import type { RefineLoader } from '../core/refine-loader.port.ts';
+import { refineExtensions } from '../core/binding/refine-extensions.model.ts';
 
 /**
- * Looks for a `<stem>.refine.ts` file next to the template, else a `<stem>.refine.js` one, and, if
- * found, dynamically imports its `refine` named export.
+ * Looks for a `<stem>.refine.ts` file next to the template, else a `<stem>.refine.js`, else a
+ * `<stem>.refine.mjs` one, and, if found, dynamically imports its `refine` named export.
  *
  * The file is loaded with a plain `import()` call: Node 24 strips TypeScript types
  * natively, so no `tsx` wrapper is needed at runtime. Node refuses to strip types of a file under
@@ -21,7 +22,7 @@ export const loadRefine: RefineLoader = async (
 ): Promise<RefineFunction | undefined> => {
   const dir = dirname(templatePath);
   const stemBase = basename(templatePath).replace(/\.template\.md$/, '');
-  const fullPath = ['ts', 'js']
+  const fullPath = refineExtensions
     .map((extension) => resolve(dir, `${stemBase}.refine.${extension}`))
     .find((candidate) => existsSync(candidate));
 

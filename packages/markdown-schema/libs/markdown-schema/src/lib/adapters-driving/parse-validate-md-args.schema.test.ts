@@ -118,6 +118,8 @@ describe('parseValidateMdArgs', () => {
         paths: ['.'],
         root: undefined,
         ignore: [],
+        templatePackages: [],
+        noTemplatePackages: false,
         noRefine: false,
         json: false,
         verbose: true,
@@ -129,6 +131,8 @@ describe('parseValidateMdArgs', () => {
         paths: ['a.md', 'docs'],
         root: undefined,
         ignore: [],
+        templatePackages: [],
+        noTemplatePackages: false,
         noRefine: true,
         json: true,
         verbose: true,
@@ -140,6 +144,8 @@ describe('parseValidateMdArgs', () => {
         paths: ['docs'],
         root: '/repo',
         ignore: ['vendor', 'a/b'],
+        templatePackages: [],
+        noTemplatePackages: false,
         noRefine: false,
         json: false,
         verbose: false,
@@ -158,6 +164,46 @@ describe('parseValidateMdArgs', () => {
     { tags: ['invariant'], meta: { spec: 'validate-md-args-help' } },
     (args) => {
       expect(parseValidateMdArgs(args)).toEqual({ kind: 'help' });
+    },
+  );
+});
+
+describe('parseValidateMdArgs template packages', () => {
+  it(
+    'takes `--template-package <key>` (repeatable) and `--no-template-packages` in directory mode only',
+    { tags: ['invariant'], meta: { spec: 'validate-md-args-template-package-flags' } },
+    () => {
+      expect(
+        parseValidateMdArgs([
+          '--template-package',
+          '@acme/templates',
+          'docs',
+          '--template-package',
+          'house-templates',
+        ]),
+      ).toMatchObject({
+        kind: 'validate-tree',
+        paths: ['docs'],
+        templatePackages: ['@acme/templates', 'house-templates'],
+        noTemplatePackages: false,
+      });
+      expect(parseValidateMdArgs(['--no-template-packages'])).toMatchObject({
+        kind: 'validate-tree',
+        templatePackages: [],
+        noTemplatePackages: true,
+      });
+      expect(parseValidateMdArgs(['--template-package'])).toEqual({
+        kind: 'usage-error',
+        message: 'Error: --template-package requires a value',
+        showUsage: true,
+      });
+      for (const flag of [['--template-package', 'x'], ['--no-template-packages']]) {
+        expect(parseValidateMdArgs(['--template', 't.template.md', ...flag, 'a.md'])).toEqual({
+          kind: 'usage-error',
+          message: `Error: ${flag[0] ?? ''} is only valid without --template`,
+          showUsage: true,
+        });
+      }
     },
   );
 });

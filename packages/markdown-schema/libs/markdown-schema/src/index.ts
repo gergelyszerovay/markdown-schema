@@ -94,3 +94,8 @@ export type {
 export type { DirectoryPort } from './lib/core/directory.port.ts';
 export type { Located } from './lib/core/located.model.ts';
 export { makeNodeDirectory } from './lib/adapters-driven/node-directory.gateway.ts';
+export { makeNodeTemplatePackages } from './lib/adapters-driven/node-template-packages.gateway.ts';
+export type { TemplatePackagesPort } from './lib/core/template-packages.port.ts';
+export type { ListedTemplatePackages } from './lib/core/listed-template-packages.model.ts';
+export type { OpenedTemplatePackage } from './lib/core/opened-template-package.model.ts';
+export type { TemplatePackage } from './lib/core/binding/template-package.model.ts';

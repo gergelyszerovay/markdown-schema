@@ -11,7 +11,7 @@ export type TemplateNameClash = {
 
 /** The catalog of a file list. */
 export type ListTemplatesResult = {
-  /** Every template, ordered by path. */
+  /** Every template of the tree, ordered by path, then those of each listed package. */
   templates: CatalogTemplate[];
   /** The names carried by more than one template, ordered by name. */
   clashes: TemplateNameClash[];

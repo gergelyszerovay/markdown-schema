@@ -264,3 +264,141 @@ describe('bindDocuments', () => {
     },
   );
 });
+
+describe('bindDocuments with template packages', () => {
+  const packageNote = 'skills/x/markdown-schema-templates/note/note.template.md';
+  const bindWith = (
+    paths: readonly string[],
+    packages: BindDocumentsInput['packages'],
+    path: string,
+  ): DocumentBinding => {
+    const binding = bindDocuments({ paths, packages }).documents.find(
+      (document) => document.path === path,
+    );
+    if (binding === undefined) throw new Error(`no binding for ${path}`);
+    return binding;
+  };
+
+  it(
+    "a listed package's templates bind a document whose name asks for them",
+    { tags: ['invariant'], meta: { spec: 'bind-documents-binds-package-templates' } },
+    () => {
+      const packages = [
+        {
+          package: '@acme/templates',
+          paths: [packageNote, 'skills/x/markdown-schema-templates/note/note.refine.js'],
+        },
+      ];
+      expect(bindWith(['docs/1.a.note.md'], packages, 'docs/1.a.note.md')).toEqual({
+        path: 'docs/1.a.note.md',
+        status: 'bound',
+        templateName: 'note',
+        templatePath: `@acme/templates/${packageNote}`,
+        templatePackage: '@acme/templates',
+        candidates: [],
+        hasRefine: true,
+        diagnostics: [],
+      });
+      expect(bindWith(['docs/x.md'], packages, 'docs/x.md').status).toBe('unbound');
+      expect(bindDocuments({ paths: ['a.md'], packages }).documents.map((d) => d.path)).toEqual([
+        'a.md',
+      ]);
+    },
+  );
+
+  it(
+    "a template in the root's markdown-schema-templates/ wins over a package template of the same name",
+    { tags: ['invariant'], meta: { spec: 'bind-documents-root-folder-overrides-a-package' } },
+    () => {
+      const binding = bindWith(
+        ['markdown-schema-templates/note/note.template.md', 'docs/a.note.md'],
+        [{ package: '@acme/templates', paths: [packageNote] }],
+        'docs/a.note.md',
+      );
+      expect(binding).toMatchObject({
+        status: 'bound',
+        templatePath: 'markdown-schema-templates/note/note.template.md',
+      });
+      expect(binding.templatePackage).toBeUndefined();
+    },
+  );
+
+  it(
+    'a template in a folder nearer the document wins over both',
+    { tags: ['invariant'], meta: { spec: 'bind-documents-nearer-folder-wins-over-packages' } },
+    () => {
+      expect(
+        bindWith(
+          [
+            'markdown-schema-templates/note/note.template.md',
+            'docs/markdown-schema-templates/note/note.template.md',
+            'docs/a.note.md',
+          ],
+          [{ package: '@acme/templates', paths: [packageNote] }],
+          'docs/a.note.md',
+        ).templatePath,
+      ).toBe('docs/markdown-schema-templates/note/note.template.md');
+    },
+  );
+
+  it(
+    'two packages with a template of one name make a document that asks for it ambiguous',
+    {
+      tags: ['edge-case'],
+      meta: {
+        spec: 'bind-documents-package-name-clash-is-ambiguous',
+        arrange:
+          'two listed packages, and two skills of a third, that each carry a template `plan`, and no `plan` template in the tree',
+        act: 'a `plan.md` is bound',
+        assert: 'it is ambiguous, with the printed paths of both templates as candidates in order',
+      },
+    },
+    () => {
+      let packages: BindDocumentsInput['packages'];
+      let two: DocumentBinding;
+      let skills: DocumentBinding;
+      arrange: {
+        packages = [
+          { package: 'a-templates', paths: ['markdown-schema-templates/plan/plan.template.md'] },
+          {
+            package: '@b/templates',
+            paths: ['skills/p/markdown-schema-templates/plan/plan.template.md'],
+          },
+        ];
+      }
+      act: {
+        two = bindWith(['planning/plan.md'], packages, 'planning/plan.md');
+        skills = bindWith(
+          ['planning/plan.md'],
+          [
+            {
+              package: 'c',
+              paths: [
+                'skills/p/markdown-schema-templates/plan/plan.template.md',
+                'skills/q/markdown-schema-templates/plan/plan.template.md',
+              ],
+            },
+          ],
+          'planning/plan.md',
+        );
+      }
+      assert: {
+        expect(two).toMatchObject({
+          status: 'ambiguous',
+          templatePath: null,
+          candidates: [
+            'a-templates/markdown-schema-templates/plan/plan.template.md',
+            '@b/templates/skills/p/markdown-schema-templates/plan/plan.template.md',
+          ],
+        });
+        expect(skills).toMatchObject({
+          status: 'ambiguous',
+          candidates: [
+            'c/skills/p/markdown-schema-templates/plan/plan.template.md',
+            'c/skills/q/markdown-schema-templates/plan/plan.template.md',
+          ],
+        });
+      }
+    },
+  );
+});

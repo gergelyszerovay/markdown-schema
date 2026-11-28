@@ -4,6 +4,16 @@ Release notes for those who consume a version.
 
 ## Unreleased
 
+## 0.1.5
+
+### Changed
+
+- **Templates of installed packages are listed, not linked.** The skill tells the reader to list a package whose
+  templates the documents bind to in `markdownSchema.templatePackages` of the root `package.json` (or to pass
+  `--template-package <key>`), says where those templates sit in the binding (after the root's own folder, printed as
+  `<key>/<path>`), and triages the new `Error: template package …` message. A folder of relative links still shares
+  templates that live elsewhere in the tree.
+
 ## 0.1.4
 
 ### Changed

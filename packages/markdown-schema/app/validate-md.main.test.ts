@@ -603,3 +603,150 @@ describe.skipIf(!existsSync(built))('validate-md binary in directory mode', () =
     },
   );
 });
+
+describe.skipIf(!existsSync(built))('validate-md binary with template packages', () => {
+  const memoTemplate = [
+    '# Memo: <!-- TEMPLATE-ONLY: string; required -->',
+    '',
+    '## 1. Meta',
+    '',
+    '- Name: <!-- TEMPLATE-ONLY: string; required -->',
+    '',
+  ].join('\n');
+  const memoRefine = [
+    'export const refine = (doc, ctx) => {',
+    "  if (doc?.meta?.Name === 'BAD') {",
+    "    ctx.addIssue({ code: 'custom', path: ['meta', 'Name'], message: 'Name must not be BAD' });",
+    '  }',
+    '};',
+    '',
+  ].join('\n');
+  const inPackage = 'skills/x/markdown-schema-templates/memo';
+  const printed = `@acme/templates/${inPackage}/memo.template.md`;
+
+  /**
+   * A tree whose root declares `@acme/templates`, installed in `node_modules` with a `memo`
+   * template and a `.refine.js` that rejects the name `BAD`, and two memos.
+   * @param manifest - The root `package.json`.
+   * @returns The context.
+   */
+  const setUpPackages = (manifest: object): Context =>
+    setUpTree({
+      'package.json': JSON.stringify(manifest),
+      'node_modules/@acme/templates/package.json': JSON.stringify({ name: '@acme/templates' }),
+      [`node_modules/@acme/templates/${inPackage}/memo.template.md`]: memoTemplate,
+      [`node_modules/@acme/templates/${inPackage}/memo.refine.js`]: memoRefine,
+      'memos/good.memo.md': '# Memo: Widget\n\n## 1. Meta\n\n- Name: Good\n',
+      'memos/bad.memo.md': '# Memo: Widget\n\n## 1. Meta\n\n- Name: BAD\n',
+    });
+
+  it(
+    "validates against a listed package's templates, printing `<key>/<path>` in text and in `--json`",
+    {
+      tags: ['scenario'],
+      meta: {
+        spec: 'binary-template-packages-bind-and-print-the-key',
+        arrange:
+          'a root whose package.json declares and lists a package installed in node_modules, with a template and a `.refine.js` that rejects `BAD`',
+        act: 'validate-md validates the tree, then again with `--json`',
+        assert:
+          'the good document is OK, the bad one fails the refine, and every template path starts with the key',
+      },
+    },
+    () => {
+      let context: Context;
+      let result: ReturnType<Context['run']>;
+      let json: ReturnType<Context['run']>;
+      arrange: {
+        context = setUpPackages({
+          devDependencies: { '@acme/templates': '^1.0.0' },
+          markdownSchema: { templatePackages: ['@acme/templates'] },
+        });
+      }
+      act: {
+        result = context.run(['memos'], context.dir);
+        json = context.run(['memos', '--json'], context.dir);
+      }
+      assert: {
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('memos/good.memo.md: OK');
+        expect(result.stderr).toContain('memos/bad.memo.md: schema validation failed');
+        expect(result.stderr).toContain('Name must not be BAD');
+        expect(result.stderr).toMatch(/2 documents: 1 OK, 1 failed; 0 ambiguous; 0 unbound/);
+        expect(result.stderr).not.toContain('.pnpm');
+        expect(
+          (JSON.parse(json.stdout) as { documents: { templatePath: string }[] }).documents.map(
+            (document) => document.templatePath,
+          ),
+        ).toEqual([printed, printed]);
+      }
+    },
+  );
+
+  it(
+    'a listed name the root does not declare is a usage error naming it',
+    {
+      tags: ['edge-case'],
+      meta: {
+        spec: 'binary-template-packages-undeclared-name-is-an-error',
+        arrange: 'a root whose package.json lists a package it does not declare',
+        act: 'validate-md validates the tree',
+        assert: 'the exit code is 1 and stderr names the package',
+      },
+    },
+    () => {
+      let context: Context;
+      let result: ReturnType<Context['run']>;
+      arrange: {
+        context = setUpPackages({ markdownSchema: { templatePackages: ['@acme/templates'] } });
+      }
+      act: {
+        result = context.run(['memos'], context.dir);
+      }
+      assert: {
+        expect(result.status).toBe(1);
+        expect(result.stderr).toMatch(
+          /template package @acme\/templates is not declared in dependencies or devDependencies/,
+        );
+      }
+    },
+  );
+
+  it(
+    '`--template-package` adds a package for one run, and `--no-template-packages` reads none',
+    {
+      tags: ['scenario'],
+      meta: {
+        spec: 'binary-template-packages-flags',
+        arrange:
+          'a root that declares a package with a template but does not list it, and a document named for it',
+        act: 'validate-md runs with `--template-package`, then with that flag and `--no-template-packages`',
+        assert: 'the first run binds the document; the second leaves it unbound',
+      },
+    },
+    () => {
+      let context: Context;
+      let added: ReturnType<Context['run']>;
+      let none: ReturnType<Context['run']>;
+      arrange: {
+        context = setUpPackages({ devDependencies: { '@acme/templates': '^1.0.0' } });
+      }
+      act: {
+        added = context.run(
+          ['memos/good.memo.md', '--template-package', '@acme/templates'],
+          context.dir,
+        );
+        none = context.run(
+          ['memos/good.memo.md', '--template-package', '@acme/templates', '--no-template-packages'],
+          context.dir,
+        );
+      }
+      assert: {
+        expect(added.status).toBe(0);
+        expect(added.stderr).toMatch(/1 documents: 1 OK, 0 failed; 0 ambiguous; 0 unbound/);
+        expect(none.status).toBe(0);
+        expect(none.stderr).toMatch(/0 documents: 0 OK, 0 failed; 0 ambiguous; 1 unbound/);
+      }
+    },
+  );
+});

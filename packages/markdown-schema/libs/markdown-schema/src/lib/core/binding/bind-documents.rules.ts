@@ -5,6 +5,7 @@ import { cleanFileSet } from './clean-file-set.rules.ts';
 import type { CatalogTemplate } from './catalog-template.model.ts';
 import { compareText } from './compare-text.rules.ts';
 import type { DocumentBinding } from './document-binding.model.ts';
+import { findPackageTemplates } from './find-package-templates.rules.ts';
 import { findTemplates } from './find-templates.rules.ts';
 import { parentDir } from './parent-dir.rules.ts';
 import { templateFolderNames } from './template-folder-names.model.ts';
@@ -44,9 +45,10 @@ function bindDocument(
   const named = templateName === null ? undefined : byName.get(templateName);
   if (named === undefined) return base;
 
+  const inTree = named.filter((template) => template.package === undefined);
   let directory = parentDir(path);
   for (;;) {
-    const inReach = named.filter((template) => template.parent === directory);
+    const inReach = inTree.filter((template) => template.parent === directory);
     const template = resolveCandidates(inReach);
     if (template !== undefined) {
       return {
@@ -56,9 +58,28 @@ function bindDocument(
         hasRefine: template.hasRefine,
       };
     }
-    if (directory === '.') return base;
+    if (directory === '.') break;
     directory = parentDir(directory);
   }
+
+  // The listed packages are one level above the root: one template binds, more are a clash.
+  const inPackages = named.filter((template) => template.package !== undefined);
+  const [only] = inPackages;
+  if (only === undefined) return base;
+  if (inPackages.length > 1) {
+    return {
+      ...base,
+      status: 'ambiguous',
+      candidates: inPackages.map((template) => template.path),
+    };
+  }
+  return {
+    ...base,
+    status: 'bound',
+    templatePath: only.path,
+    templatePackage: only.package,
+    hasRefine: only.hasRefine,
+  };
 }
 
 /**
@@ -67,15 +88,25 @@ function bindDocument(
  * up from its directory, each ancestor's own templates folder is searched (not its subtree),
  * and the first ancestor that has one decides. A file whose name is all upper case
  * (`CHANGELOG.md`) binds to the template of that name, else to the lower-case one (`changelog`). A file inside a templates folder is a
- * `template`, bound to nothing. Binding knows nothing of layered-docs trees. Nothing is read;
- * a template's refine file is only looked for.
+ * `template`, bound to nothing. The templates of the listed packages form a level above the
+ * root: a document binds to one only when no folder of the tree has a template of its name, so a
+ * template in the root's own folder overrides a package's; two package templates of that name
+ * (two packages, or two skills of one) make the document `ambiguous`. A package's files are
+ * catalog only, never documents. Binding knows nothing of layered-docs trees. Nothing is read; a
+ * template's refine file is only looked for.
  * @param input - The file list.
  * @returns The bindings, ordered by path.
  */
 export function bindDocuments(input: BindDocumentsInput): BindDocumentsResult {
   const files = cleanFileSet(input.paths);
   const ignoredDirNames = new Set(input.ignoredDirNames ?? []);
-  const { templates } = findTemplates(files, ignoredDirNames);
+  const { templates: treeTemplates } = findTemplates(files, ignoredDirNames);
+  const templates = [
+    ...treeTemplates,
+    ...(input.packages ?? []).flatMap(
+      (templatePackage) => findPackageTemplates(templatePackage).templates,
+    ),
+  ];
   const byName = new Map<string, CatalogTemplate[]>();
   for (const template of templates) {
     byName.set(template.name, [...(byName.get(template.name) ?? []), template]);

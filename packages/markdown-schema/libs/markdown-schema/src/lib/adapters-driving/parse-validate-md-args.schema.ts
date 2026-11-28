@@ -1,14 +1,22 @@
 import type { ValidateMdArgs } from './validate-md-args.schema.ts';
 
 /** The options only directory mode takes. */
-const directoryOnlyOptions = ['--root', '--ignore', '--json', '--verbose'];
+const directoryOnlyOptions = [
+  '--root',
+  '--ignore',
+  '--template-package',
+  '--no-template-packages',
+  '--json',
+  '--verbose',
+];
 
 /**
  * Parses the `validate-md` command line. With `--template <file>` it is the single-template
  * mode: `--emit-json <path>`, `--no-refine` and the documents to validate, or `--emit-schema`
  * alone to print the template's JSON Schema. Without it, it is
- * directory mode: `--root <dir>`, `--ignore <dir-or-path>` (repeatable), `--no-refine`,
- * `--json`, `--verbose` and the paths to validate, `.` when there are none, except that an empty
+ * directory mode: `--root <dir>`, `--ignore <dir-or-path>` (repeatable), `--template-package <key>`
+ * (repeatable), `--no-template-packages`, `--no-refine`, `--json`, `--verbose` and the paths to
+ * validate, `.` when there are none, except that an empty
  * command line, `--help` and `-h` ask for the usage. The first problem
  * found is the one reported, in argument order, then the checks on the whole line.
  * @param args - The arguments after the program name.
@@ -23,6 +31,8 @@ export function parseValidateMdArgs(args: readonly string[]): ValidateMdArgs {
   let emitSchema = false;
   let root: string | undefined;
   const ignore: string[] = [];
+  const templatePackages: string[] = [];
+  let noTemplatePackages = false;
   let noRefine = false;
   let json = false;
   let verbose = false;
@@ -51,13 +61,16 @@ export function parseValidateMdArgs(args: readonly string[]): ValidateMdArgs {
           showUsage: true,
         };
       }
-    } else if (arg === '--root' || arg === '--ignore') {
+    } else if (arg === '--root' || arg === '--ignore' || arg === '--template-package') {
       const value = rest.shift();
       if (value === undefined) {
         return { kind: 'usage-error', message: `Error: ${arg} requires a value`, showUsage: true };
       }
       if (arg === '--root') root = value;
-      else ignore.push(value);
+      else if (arg === '--ignore') ignore.push(value);
+      else templatePackages.push(value);
+    } else if (arg === '--no-template-packages') {
+      noTemplatePackages = true;
     } else if (arg === '--emit-schema') {
       emitSchema = true;
     } else if (arg === '--no-refine') {
@@ -100,6 +113,8 @@ export function parseValidateMdArgs(args: readonly string[]): ValidateMdArgs {
       paths: paths.length === 0 ? ['.'] : paths,
       root,
       ignore,
+      templatePackages,
+      noTemplatePackages,
       noRefine,
       json,
       verbose,

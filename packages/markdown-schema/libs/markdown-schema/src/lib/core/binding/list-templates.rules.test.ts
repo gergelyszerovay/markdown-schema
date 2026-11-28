@@ -95,3 +95,65 @@ describe('listTemplates', () => {
     },
   );
 });
+
+describe('listTemplates with template packages', () => {
+  it(
+    "only a package's template folders make its catalog, each template printed as `<key>/<path in the package>`",
+    { tags: ['invariant'], meta: { spec: 'list-templates-reads-package-template-folders' } },
+    () => {
+      const { templates, clashes } = listTemplates({
+        paths: ['markdown-schema-templates/note/note.template.md'],
+        packages: [
+          {
+            package: '@acme/templates',
+            paths: [
+              'markdown-schema-templates/note/note.template.md',
+              'skills/x/markdown-schema-templates/plan/plan.template.md',
+              'skills/x/markdown-schema-templates/plan/plan.refine.mjs',
+              'skills/x/layered-doc-templates/old/old.template.md',
+              'docs/markdown-schema-templates/deep/deep.template.md',
+              'skills/x/sub/markdown-schema-templates/deeper/deeper.template.md',
+            ],
+          },
+        ],
+      });
+      expect(templates).toEqual([
+        {
+          name: 'note',
+          path: 'markdown-schema-templates/note/note.template.md',
+          folder: 'markdown-schema-templates',
+          parent: '.',
+          legacy: false,
+          hasRefine: false,
+        },
+        {
+          name: 'note',
+          path: '@acme/templates/markdown-schema-templates/note/note.template.md',
+          folder: '@acme/templates/markdown-schema-templates',
+          parent: '@acme/templates',
+          legacy: false,
+          hasRefine: false,
+          package: '@acme/templates',
+        },
+        {
+          name: 'plan',
+          path: '@acme/templates/skills/x/markdown-schema-templates/plan/plan.template.md',
+          folder: '@acme/templates/skills/x/markdown-schema-templates',
+          parent: '@acme/templates/skills/x',
+          legacy: false,
+          hasRefine: true,
+          package: '@acme/templates',
+        },
+      ]);
+      expect(clashes).toEqual([
+        {
+          name: 'note',
+          paths: [
+            'markdown-schema-templates/note/note.template.md',
+            '@acme/templates/markdown-schema-templates/note/note.template.md',
+          ],
+        },
+      ]);
+    },
+  );
+});

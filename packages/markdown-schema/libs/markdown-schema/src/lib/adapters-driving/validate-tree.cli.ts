@@ -8,8 +8,8 @@ export type ValidateTreeCommand = (args: ValidateTreeArgs) => Promise<number>;
 /**
  * Creates the directory-mode command: validates every bound document under the paths and
  * prints the outcome to stderr, or the whole result as JSON to stdout with `--json`. Exit
- * code 0 means everything bound validates and nothing is ambiguous; 1 means a refused root or
- * path, an unreadable tree, a failed document, an ambiguous file or a template that did not
+ * code 0 means everything bound validates and nothing is ambiguous; 1 means a refused root,
+ * path or template package, an unreadable tree, a failed document, an ambiguous file or a template that did not
  * compile.
  * @param app - The use case the command calls: `validateTree` validates the tree.
  * @returns The command.
@@ -20,6 +20,8 @@ export function makeValidateTreeCommand(app: { validateTree: ValidateTree }): Va
       root: args.root,
       paths: args.paths,
       ignore: args.ignore,
+      templatePackages: args.templatePackages,
+      noTemplatePackages: args.noTemplatePackages,
       noRefine: args.noRefine,
     });
     if (args.json) console.log(JSON.stringify(result, null, 2));

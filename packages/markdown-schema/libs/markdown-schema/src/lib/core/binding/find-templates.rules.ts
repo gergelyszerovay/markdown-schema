@@ -4,6 +4,7 @@ import type { CatalogTemplate } from './catalog-template.model.ts';
 import { compareText } from './compare-text.rules.ts';
 import { joinPath } from './join-path.rules.ts';
 import { parentDir } from './parent-dir.rules.ts';
+import { refineExtensions } from './refine-extensions.model.ts';
 import { legacyTemplateFolderName, templateFolderNames } from './template-folder-names.model.ts';
 
 /** What {@link findTemplates} found. */
@@ -51,7 +52,7 @@ export function findTemplates(
       folder,
       parent: parentDir(folder),
       legacy: folderName === legacyTemplateFolderName,
-      hasRefine: ['ts', 'js'].some((extension) =>
+      hasRefine: refineExtensions.some((extension) =>
         files.has(joinPath(joinPath(folder, name), `${name}.refine.${extension}`)),
       ),
     });

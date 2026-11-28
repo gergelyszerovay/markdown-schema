@@ -63,6 +63,7 @@ export type { CatalogTemplate } from './lib/core/binding/catalog-template.model.
 export type { DirectoryEntry } from './lib/core/binding/directory-entry.model.ts';
 export type { BindingStatus, DocumentBinding } from './lib/core/binding/document-binding.model.ts';
 export type { ListTemplatesInput } from './lib/core/binding/list-templates-input.model.ts';
+export type { TemplatePackage } from './lib/core/binding/template-package.model.ts';
 export type {
   ListTemplatesResult,
   TemplateNameClash,

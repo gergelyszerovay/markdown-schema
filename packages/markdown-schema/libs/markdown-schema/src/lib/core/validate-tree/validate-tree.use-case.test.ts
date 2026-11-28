@@ -3,6 +3,8 @@ import { makeDirectoryFake } from '../../testing/directory.fake.ts';
 import type { DirectoryFake } from '../../testing/directory.fake.ts';
 import { makeRefineLoaderFake } from '../../testing/refine-loader.fake.ts';
 import type { RefineLoaderFake } from '../../testing/refine-loader.fake.ts';
+import { makeTemplatePackagesFake } from '../../testing/template-packages.fake.ts';
+import type { TemplatePackagesFake } from '../../testing/template-packages.fake.ts';
 import { makeTextFilesFake } from '../../testing/text-files.fake.ts';
 import type { ValidateTreeInput } from './validate-tree.input.ts';
 import type { ValidateTreeResult } from './validate-tree.result.ts';
@@ -31,6 +33,7 @@ type Context = {
   validate: (input?: Partial<ValidateTreeInput>) => Promise<ValidateTreeResult>;
   directory: DirectoryFake;
   refines: RefineLoaderFake;
+  packages: TemplatePackagesFake;
   reads: string[];
 };
 
@@ -38,12 +41,24 @@ type Context = {
  * Builds the use case over an in-memory tree.
  * @param files - The files that exist, by root-relative path.
  * @param unreadable - Files that are listed but cannot be read.
+ * @param packages - The template-packages port's arrangement; the files of a package `<key>`
+ *   are read from `/packages/<key>/<path>` and are given in `files` under that absolute path.
  * @returns The runner and the fakes behind it.
  */
-function setUp(files: Record<string, string>, unreadable: readonly string[] = []): Context {
-  const directory = makeDirectoryFake([...Object.keys(files), ...unreadable]);
+function setUp(
+  files: Record<string, string>,
+  unreadable: readonly string[] = [],
+  packages: Parameters<typeof makeTemplatePackagesFake>[0] = {},
+): Context {
+  const treeFiles = Object.keys(files).filter((path) => !path.startsWith('/'));
+  const directory = makeDirectoryFake([...treeFiles, ...unreadable]);
   const textFiles = makeTextFilesFake(
-    Object.fromEntries(Object.entries(files).map(([path, text]) => [`/virtual/${path}`, text])),
+    Object.fromEntries(
+      Object.entries(files).map(([path, text]) => [
+        path.startsWith('/') ? path : `/virtual/${path}`,
+        text,
+      ]),
+    ),
   );
   const reads: string[] = [];
   const read = textFiles.read.bind(textFiles);
@@ -52,8 +67,10 @@ function setUp(files: Record<string, string>, unreadable: readonly string[] = []
     return read(path);
   };
   const refines = makeRefineLoaderFake();
+  const templatePackages = makeTemplatePackagesFake(packages);
   const run = makeValidateTree({
     directory: directory.directory,
+    templatePackages: templatePackages.templatePackages,
     textFiles,
     loadRefine: refines.loadRefine,
   });
@@ -61,6 +78,7 @@ function setUp(files: Record<string, string>, unreadable: readonly string[] = []
     validate: (input = {}) => run({ ...defaultInput, ...input }),
     directory,
     refines,
+    packages: templatePackages,
     reads,
   };
 }
@@ -393,6 +411,219 @@ describe('makeValidateTree', () => {
           ['b.note.md', 'valid'],
         ]);
       }
+    },
+  );
+});
+
+describe('makeValidateTree with template packages', () => {
+  const key = '@acme/templates';
+  const inPackage = 'markdown-schema-templates/note/note.template.md';
+  const printed = `${key}/${inPackage}`;
+
+  it(
+    "validates a document against a listed package's template, printed as `<key>/<path>`",
+    {
+      tags: ['scenario'],
+      meta: {
+        spec: 'validate-tree-validates-against-package-templates',
+        arrange:
+          'a root whose package.json lists a package with a `note` template, and a document named for it',
+        act: 'the tree is validated',
+        assert:
+          "the document is OK against `<key>/markdown-schema-templates/note/note.template.md`, read from the package's directory",
+      },
+    },
+    async () => {
+      let context: Context;
+      let result: Extract<ValidateTreeResult, { kind: 'validated' }>;
+      arrange: {
+        context = setUp(
+          { 'docs/a.note.md': valid, [`/packages/${key}/${inPackage}`]: template },
+          [],
+          { listed: [key], packages: { [key]: [inPackage] } },
+        );
+      }
+      act: {
+        result = validated(await context.validate());
+      }
+      assert: {
+        expect(result.documents).toEqual([
+          {
+            path: 'docs/a.note.md',
+            templatePath: printed,
+            outcome: { kind: 'valid', path: 'docs/a.note.md', wrote: undefined },
+          },
+        ]);
+        expect(context.reads).toContain(`/packages/${key}/${inPackage}`);
+        expect(context.refines.calls).toEqual([`/packages/${key}/${inPackage}`]);
+        expect(context.packages.openCalls).toEqual([key]);
+      }
+    },
+  );
+
+  it(
+    "a package's `*.refine.js` runs, `--no-refine` skips it, and a `*.refine.ts` there is a template error",
+    {
+      tags: ['edge-case'],
+      meta: {
+        spec: 'validate-tree-package-refine-companions',
+        arrange: 'a package with a template beside a `.refine.js` and one beside a `.refine.ts`',
+        act: 'the tree is validated, then again with `noRefine`',
+        assert:
+          'the `.js` companion is loaded from the package directory and the `.ts` one is a template error; with `noRefine` neither is loaded and there is no error',
+      },
+    },
+    async () => {
+      let context: Context;
+      let withRefine: Extract<ValidateTreeResult, { kind: 'validated' }>;
+      let refineCalls: string[];
+      let without: Extract<ValidateTreeResult, { kind: 'validated' }>;
+      arrange: {
+        const memo = 'skills/m/markdown-schema-templates/memo/memo.template.md';
+        context = setUp(
+          {
+            'docs/a.note.md': valid,
+            'docs/b.memo.md': valid.replace('Note', 'Memo'),
+            [`/packages/${key}/${inPackage}`]: template,
+            [`/packages/${key}/${memo}`]: template.replace('Note', 'Memo'),
+          },
+          [],
+          {
+            listed: [key],
+            packages: {
+              [key]: [
+                inPackage,
+                'markdown-schema-templates/note/note.refine.js',
+                memo,
+                memo.replace('.template.md', '.refine.ts'),
+              ],
+            },
+          },
+        );
+        context.refines.givenRefine(`/packages/${key}/${inPackage}`, (_doc, ctx): void => {
+          ctx.addIssue({ code: 'custom', message: 'refined away' });
+        });
+      }
+      act: {
+        withRefine = validated(await context.validate());
+        refineCalls = [...context.refines.calls];
+        without = validated(await context.validate({ noRefine: true }));
+      }
+      assert: {
+        expect(refineCalls).toEqual([`/packages/${key}/${inPackage}`]);
+        expect(withRefine.templateErrors).toEqual([
+          {
+            templatePath: `${key}/skills/m/markdown-schema-templates/memo/memo.template.md`,
+            message: expect.stringContaining('.refine.ts') as unknown,
+          },
+        ]);
+        expect(
+          withRefine.documents.map((document) => [document.path, document.outcome.kind]),
+        ).toEqual([
+          ['docs/a.note.md', 'schema-invalid'],
+          ['docs/b.memo.md', 'not-validated'],
+        ]);
+        expect(context.refines.calls).toEqual(refineCalls);
+        expect(without.templateErrors).toEqual([]);
+        expect(without.summary).toMatchObject({ ok: 2, failed: 0 });
+      }
+    },
+  );
+
+  it(
+    '`--template-package` adds a package for one run, and `--no-template-packages` reads none',
+    {
+      tags: ['scenario'],
+      meta: {
+        spec: 'validate-tree-template-package-flags',
+        arrange: 'a root that lists one package, and a second package given on the command line',
+        act: 'the tree is validated with the extra package, then with `noTemplatePackages`',
+        assert:
+          'the first run opens both packages, the listed one first; the second opens none and reads no list',
+      },
+    },
+    async () => {
+      let context: Context;
+      let first: Extract<ValidateTreeResult, { kind: 'validated' }>;
+      let second: Extract<ValidateTreeResult, { kind: 'validated' }>;
+      let openedFirst: string[];
+      arrange: {
+        context = setUp(
+          { 'docs/a.note.md': valid, [`/packages/extra/${inPackage}`]: template },
+          [],
+          { listed: [key], packages: { [key]: [], extra: [inPackage] } },
+        );
+      }
+      act: {
+        first = validated(await context.validate({ templatePackages: ['extra', key] }));
+        openedFirst = [...context.packages.openCalls];
+        second = validated(
+          await context.validate({ templatePackages: ['extra'], noTemplatePackages: true }),
+        );
+      }
+      assert: {
+        expect(openedFirst).toEqual([key, 'extra']);
+        expect(first.documents.map((document) => document.templatePath)).toEqual([
+          `extra/${inPackage}`,
+        ]);
+        expect(context.packages.openCalls).toEqual(openedFirst);
+        expect(context.packages.listedCalls).toEqual(['/virtual']);
+        expect(second.unbound).toEqual(['docs/a.note.md']);
+      }
+    },
+  );
+
+  it(
+    'a listed name that cannot be opened ends the run as refused, naming it',
+    {
+      tags: ['edge-case'],
+      meta: {
+        spec: 'validate-tree-refuses-an-unusable-template-package',
+        arrange: 'a root that lists a package the port refuses to open',
+        act: 'the tree is validated',
+        assert: "the run is refused with the port's message and no document is read",
+      },
+    },
+    async () => {
+      let context: Context;
+      let result: ValidateTreeResult;
+      arrange: {
+        context = setUp({ 'docs/a.note.md': valid }, [], {
+          listed: ['missing'],
+          refused: { missing: 'Error: template package missing is not installed' },
+        });
+      }
+      act: {
+        result = await context.validate();
+      }
+      assert: {
+        expect(result).toEqual({
+          kind: 'refused',
+          message: 'Error: template package missing is not installed',
+        });
+        expect(context.reads).toEqual([]);
+        expect(context.directory.scopeCalls).toEqual([]);
+      }
+    },
+  );
+
+  it(
+    'a root without the field validates as before',
+    { tags: ['invariant'], meta: { spec: 'validate-tree-without-template-packages-is-unchanged' } },
+    async () => {
+      const files = { [templatePath]: template, 'docs/a.note.md': valid, 'docs/b.md': '# B\n' };
+      const context = setUp(files);
+      const result = validated(await context.validate());
+      expect(context.packages.openCalls).toEqual([]);
+      expect(result.documents.map((document) => document.templatePath)).toEqual([templatePath]);
+      expect(result.summary).toEqual({
+        documents: 1,
+        ok: 1,
+        failed: 0,
+        ambiguous: 0,
+        unbound: 1,
+        templateErrors: 0,
+      });
     },
   );
 });
